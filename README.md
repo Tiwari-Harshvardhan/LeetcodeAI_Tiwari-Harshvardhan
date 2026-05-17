@@ -173,7 +173,7 @@ Here is a checklist of features that would be incredibly useful for the communit
 
 - [ ] **WhatsApp Reminder Service**: Send automated daily reminders to solve LeetCode problems using the **Twilio API**.
 - [ ] **Automated Call Alerts**: Trigger automated phone calls using **ElevenLabs** and Twilio if a user hasn't solved their daily problem by a specific time.
-- [x] **Multi-platform Publishing**: Add support for publishing to Medium, Hashnode, or an existing personal blog/website.
+- [ ] **Multi-platform Publishing**: Add support for publishing to Medium, Hashnode, or an existing personal blog/website.
 - [ ] **Customizable Prompts**: Allow users to configure the prompt used by Gemini so they can customize the tone and style of the generated blog post.
 - [ ] **Support for Other Coding Platforms**: Extend support to platforms like HackerRank, Codeforces, or GeeksforGeeks.
 - [ ] **Dashboard/Stats Page**: Create a simple dashboard to track the number of problems solved, posts published, and consistency streaks.
@@ -196,7 +196,7 @@ The backend can be deployed for free on [Render](https://render.com/).
 
 ## 🤝 Contributing
 
-We ❤️ contributions! LeetLog AI is part of **GSSoC 2025** and welcomes developers of all experience levels.
+We ❤️ contributions! LeetLog AI is part of **GSSoC 2026** and welcomes developers of all experience levels.
 
 Please read our **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
 - How to set up your development environment
