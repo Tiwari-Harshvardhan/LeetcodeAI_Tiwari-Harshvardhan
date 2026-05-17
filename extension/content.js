@@ -5,6 +5,10 @@
     console.log("LeetLog AI: Tracking successful submissions...");
 
     let isProcessing = false;
+    // Auto-trigger debounce and dedupe helpers
+    let autoTriggerTimer = null;
+    const AUTO_TRIGGER_DEBOUNCE_MS = 800; // wait for DOM to settle
+    const AUTO_TRIGGER_MIN_INTERVAL_MS = 60 * 1000; // 1 minute between auto-triggers for same submission
 
     // Function to handle data extraction and blog generation
     const triggerBlogGeneration = async () => {

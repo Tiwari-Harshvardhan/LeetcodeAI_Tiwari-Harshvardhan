@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from ai import generate_blog
-from devto import post_to_platform
+from devto import publish_to_platforms
 import uvicorn
 from dotenv import load_dotenv
 import os
@@ -58,6 +58,9 @@ class Problem(BaseModel):
     code: str
     author: str = "Anonymous Developer"
     client_time: str | None = None
+    platforms: list[str] | None = None
+    publish_as_draft: bool = False
+    tags: list[str] | None = None
 
 
 class ReminderPreference(BaseModel):
@@ -102,7 +105,7 @@ async def create_blog(problem: Problem):
     """
     Accepts a LeetCode problem and:
     1. Generates a blog using Gemini AI
-    2. Publishes it to Dev.to
+    2. Publishes it to one or more configured platforms
     """
 
     if not problem.code or problem.code.strip() == "":
@@ -121,17 +124,35 @@ async def create_blog(problem: Problem):
         }
 
     try:
-        response = await post_to_platform(problem.title, blog_content)
+        platform_results = await publish_to_platforms(
+            problem.title,
+            blog_content,
+            platforms=problem.platforms,
+            published=not problem.publish_as_draft,
+            tags=problem.tags,
+        )
+        successful_results = [
+            result for result in platform_results if result.get("status") == "success"
+        ]
+        overall_status = "error"
+        if len(successful_results) == len(platform_results):
+            overall_status = "success"
+        elif successful_results:
+            overall_status = "partial_success"
+
 
         return {
-            "status": "success",
-            "data": response
+            "status": overall_status,
+            "data": {
+                "blog_content": blog_content,
+                "platforms": platform_results,
+            }
         }
 
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Dev.to API failure: {str(e)}"
+            "message": f"Publishing failure: {str(e)}"
         }
 
 
