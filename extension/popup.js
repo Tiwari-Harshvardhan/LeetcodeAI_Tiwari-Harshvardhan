@@ -49,6 +49,7 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     try {
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         const tab = tabs[0];
+        const customPrompt = document.getElementById('customPrompt').value.trim();
         
         if (!tab || !tab.url || !tab.url.includes("leetcode.com/problems/")) {
             statusEl.innerText = "Please open a LeetCode problem page!";
@@ -59,7 +60,8 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
         // Try simple message first
         try {
             await chrome.tabs.sendMessage(tab.id, { 
-                type: 'MANUAL_TRIGGER'
+                type: 'MANUAL_TRIGGER',
+                custom_prompt: customPrompt 
             });
         } catch (msgErr) {
             console.log("Re-injecting content script...");

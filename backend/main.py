@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
@@ -57,7 +57,8 @@ class Problem(BaseModel):
     description: str
     code: str
     author: str = "Anonymous Developer"
-    client_time: str | None = None
+    client_time: str = None  # Optional client time string
+    custom_prompt : str = None #custom_prompt for the user
     platforms: list[str] | None = None
     publish_as_draft: bool = False
     tags: list[str] | None = None
@@ -107,6 +108,11 @@ async def create_blog(problem: Problem):
     1. Generates a blog using Gemini AI
     2. Publishes it to one or more configured platforms
     """
+    if problem.custom_prompt and len(problem.custom_prompt.strip()) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Custom prompt exceeds maximum length of 1000 characters."
+        )
 
     if not problem.code or problem.code.strip() == "":
         return {
