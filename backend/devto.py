@@ -1,5 +1,5 @@
-import os
 import asyncio
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_TAGS = ["leetcode", "dsa", "programming", "tutorial"]
+
 
 @dataclass(frozen=True)
 class PublishResult:
@@ -56,7 +57,9 @@ class BasePublisher:
         async with httpx.AsyncClient() as client:
             for attempt in range(retries + 1):
                 try:
-                    response = await client.post(url, headers=headers, json=payload, timeout=20.0)
+                    response = await client.post(
+                        url, headers=headers, json=payload, timeout=20.0
+                    )
                     if response.status_code in (200, 201):
                         return response.json()
                     if attempt == retries:
@@ -65,7 +68,9 @@ class BasePublisher:
                         )
                 except httpx.RequestError as exc:
                     if attempt == retries:
-                        raise PublisherError(f"{platform} network error: {exc}") from exc
+                        raise PublisherError(
+                            f"{platform} network error: {exc}"
+                        ) from exc
                 await asyncio.sleep(1)
             raise PublisherError(f"{platform} API request failed.")
 

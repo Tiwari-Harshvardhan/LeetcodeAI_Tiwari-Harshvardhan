@@ -4,8 +4,8 @@ import motor.motor_asyncio
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from twilio.rest import Client
 
@@ -127,7 +127,6 @@ async def create_blog(problem: Problem):
         elif successful_results:
             overall_status = "partial_success"
 
-
         return {
             "status": overall_status,
             "data": {
@@ -174,13 +173,6 @@ async def unsubscribe(data: dict):
 # Run Server
 # -----------------------------
 if __name__ == "__main__":
-
     uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
 
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=10000,
-        reload=True
-    )
-
+    uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
