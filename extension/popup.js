@@ -48,6 +48,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     draftInput.addEventListener('change', savePublishingSettings);
 
     statusEl.innerText = "Publishing automation active";
+
+    // Load and render recent posts history
+    chrome.storage.local.get({ publishHistory: [] }, ({ publishHistory }) => {
+        const listEl = document.getElementById('historyList');
+        if (!publishHistory.length) {
+            listEl.innerHTML = '<div class="history-empty">No posts yet. Generate your first blog! ✍️</div>';
+            return;
+        }
+        listEl.innerHTML = publishHistory.map(entry => {
+            const date = new Date(entry.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            const platforms = (entry.platforms || []).join(', ') || 'unknown';
+            return `<div class="history-item" data-url="${entry.url || ''}">
+                <div class="history-item-title">${entry.title}</div>
+                <div class="history-item-meta">${date} &middot; ${platforms}</div>
+            </div>`;
+        }).join('');
+
+        listEl.querySelectorAll('.history-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const url = item.dataset.url;
+                if (url) chrome.tabs.create({ url });
+            });
+        });
+    });
 });
 
 document.getElementById('generateBtn').addEventListener('click', async () => {

@@ -44,17 +44,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         .filter(result => result.status === 'success')
                         .map(result => result.platform)
                         .join(', ');
+                        const devtoResult = platforms.find(r => r.platform === 'devto' && r.status === 'success');
                         chrome.storage.local.get({ publishHistory: [] }, (res) => {
-  const entry = {
-    title: title,
-    date: client_time || new Date().toISOString(),
-    platforms: postedPlatforms ? postedPlatforms.split(', ').filter(p => p) : [],
-    status: data.status
-  };
-  const history = res.publishHistory;
-  history.unshift(entry);
-  chrome.storage.local.set({ publishHistory: history.slice(0, 100) });
-});
+                            const entry = {
+                                title: title,
+                                url: devtoResult?.url || null,
+                                publishedAt: client_time || new Date().toISOString(),
+                                platforms: postedPlatforms ? postedPlatforms.split(', ').filter(p => p) : []
+                            };
+                            const history = res.publishHistory;
+                            history.unshift(entry);
+                            chrome.storage.local.set({ publishHistory: history.slice(0, 10) });
+                        });
                     const failedPlatforms = platforms
                         .filter(result => result.status === 'error')
                         .map(result => result.platform)
