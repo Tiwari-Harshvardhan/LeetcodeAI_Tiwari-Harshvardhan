@@ -14,3 +14,4 @@ class PublishRecord(BaseModel):
     platforms: list[str]
     status: str
     author: Optional[str] = "Anonymous Developer"
+    
