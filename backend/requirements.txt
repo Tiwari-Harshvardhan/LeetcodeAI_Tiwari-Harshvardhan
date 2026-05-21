@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 pydantic
-google-generativeai
+google-genai
 httpx
 python-dotenv
 twilio
@@ -17,4 +17,3 @@ pytest-asyncio
 pytest-mock
 responses
 ruff
-
