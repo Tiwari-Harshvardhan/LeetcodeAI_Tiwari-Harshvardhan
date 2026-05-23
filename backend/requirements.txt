@@ -10,9 +10,6 @@ apscheduler==3.11.2
 motor==3.7.1
 pytz==2026.2
 pymongo==4.17.0
-sentence-transformers==2.3.0
-numpy==1.26.4
-torch>=2.2.2
 
 # --- Test & Dev Dependencies ---
 pytest
