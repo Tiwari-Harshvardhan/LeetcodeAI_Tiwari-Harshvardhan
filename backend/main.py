@@ -293,15 +293,20 @@ def test_call():
         import os
         
         message = "Hello Vansh, this is a test call from your LeetCode AI backend. Keep coding!"
-        audio_file = generate_audio(message)
         
-        backend_url = os.getenv("BACKEND_URL", "https://leetcodeai-backend.onrender.com")
-        if backend_url.endswith("/"):
-            backend_url = backend_url[:-1]
-            
-        audio_url = f"{backend_url}/{audio_file}"
-        sid = make_call("+917819834452", audio_url)
-        return {"status": "success", "sid": sid, "audio_url": audio_url, "message": "Call initiated successfully."}
+        try:
+            audio_file = generate_audio(message)
+            backend_url = os.getenv("BACKEND_URL", "https://leetcodeai-backend.onrender.com")
+            if backend_url.endswith("/"):
+                backend_url = backend_url[:-1]
+            audio_url = f"{backend_url}/{audio_file}"
+            sid = make_call("+917819834452", audio_url=audio_url)
+            return {"status": "success", "sid": sid, "audio_url": audio_url, "message": "Call initiated successfully with ElevenLabs."}
+        except Exception as el_err:
+            print("ElevenLabs Error in Test Route:", el_err)
+            # Fallback to Twilio TTS
+            sid = make_call("+917819834452", text_to_say=message)
+            return {"status": "success", "sid": sid, "message": "ElevenLabs failed (Free Tier VPN block), but Twilio TTS call initiated successfully.", "elevenlabs_error": str(el_err)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
