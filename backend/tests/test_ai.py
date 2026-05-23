@@ -1,59 +1,73 @@
-"""
-Unit tests for the blog generation service in ai.py.
-Tests use mock_gemini_client to avoid real Gemini API calls.
-"""
+import re
+
+import pytest
+from dotenv import load_dotenv
+
+from ai.provider_manager import ProviderManager
+
+load_dotenv()
 
 
-class TestGenerateBlog:
-    def test_generate_blog_returns_string(self, app_module, mock_gemini_client):
-        """generate_blog returns a non-empty string."""
-        from types import SimpleNamespace
+@pytest.mark.parametrize(
+    "provider_name",
+    [
+        "gemini",
+        "openai",
+        "perplexity",
+    ],
+)
+def test_provider_generation(
+    monkeypatch,
+    provider_name,
+):
+    """
+    Test that each provider generates
+    a valid response about Python.
+    """
 
-        from ai import generate_blog
+    monkeypatch.setenv(
+        "AI_PROVIDER",
+        provider_name,
+    )
 
-        problem = SimpleNamespace(
-            title="Two Sum",
-            description="Given an array...",
-            code="def twoSum(): pass",
-            author="testuser",
-            client_time=None,
+    manager = ProviderManager()
+
+    response = manager.generate(
+        "Write one short sentence about Python."
+    )
+
+    print(f"\n[{provider_name}] Response: {response}")
+
+    # basic validation
+    assert isinstance(response, str)
+    assert response.strip() != ""
+    assert len(response.strip()) > 10
+
+    # content validation
+    assert re.search(
+        r"\bpython\b",
+        response,
+        re.IGNORECASE,
+    ), f"{provider_name} response does not mention Python"
+
+    # common API/auth errors should fail
+    error_patterns = [
+        r"invalid api key",
+        r"unauthorized",
+        r"authentication",
+        r"rate limit",
+        r"quota",
+        r"forbidden",
+        r"error",
+        r"failed",
+    ]
+
+    for pattern in error_patterns:
+        assert not re.search(
+            pattern,
+            response,
+            re.IGNORECASE,
+        ), (
+            f"{provider_name} returned an error response: "
+            f"{response}"
         )
-        result = generate_blog(problem)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_generate_blog_calls_gemini_once(self, app_module, mock_gemini_client):
-        """generate_blog calls the Gemini model exactly once."""
-        from types import SimpleNamespace
-
-        from ai import generate_blog
-
-        problem = SimpleNamespace(
-            title="Two Sum",
-            description="Given an array...",
-            code="def twoSum(): pass",
-            author="testuser",
-            client_time=None,
-        )
-        generate_blog(problem)
-        mock_gemini_client["model"].generate_content.assert_called_once()
-
-    def test_generate_blog_includes_title_in_prompt(
-        self, app_module, mock_gemini_client
-    ):
-        """The prompt sent to Gemini includes the problem title."""
-        from types import SimpleNamespace
-
-        from ai import generate_blog
-
-        problem = SimpleNamespace(
-            title="Unique Problem Title XYZ",
-            description="Some description",
-            code="def solve(): pass",
-            author="testuser",
-            client_time=None,
-        )
-        generate_blog(problem)
-        call_args = mock_gemini_client["model"].generate_content.call_args
-        prompt_text = call_args[1].get("contents") or call_args[0][0]
-        assert "Unique Problem Title XYZ" in prompt_text
