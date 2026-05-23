@@ -11,9 +11,9 @@ from twilio.rest import Client
 
 from ai.blog_generator import generate_blog
 from devto import publish_to_platforms
-from social import share_to_platforms
 from models.reminder import PublishRecord
 from services.reminder_scheduler import start_scheduler
+from social import share_to_platforms
 
 load_dotenv()
 
@@ -166,12 +166,12 @@ async def create_blog(problem: Problem):
             if res.get("url"):
                 post_url = res["url"]
                 break
-        
+
         if post_url:
             try:
                 social_results = share_to_platforms(
-                    title=problem.title, 
-                    post_url=post_url, 
+                    title=problem.title,
+                    post_url=post_url,
                     tags=problem.tags
                 )
             except Exception as e:
