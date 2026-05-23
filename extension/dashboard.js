@@ -2,6 +2,19 @@ const API_BASE_URL = "https://leetcodeai-backend.onrender.com";
 
 const colors = { devto:'#3b49df', hashnode:'#2962ff', medium:'#00ab6c', webhook:'#f7a01a' };
 
+function escapeHTML(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>'"]/g, 
+    tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag)
+  );
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setLoading(true);
   fetchStatsFromBackend()
@@ -86,7 +99,7 @@ function renderPlatformBarsFromMap(counts) {
   const max = Math.max(...entries.map(e => e[1]));
   container.innerHTML = entries.map(([name, count]) => `
     <div class="platform-bar">
-      <span class="platform-name">${name}</span>
+      <span class="platform-name">${escapeHTML(name)}</span>
       <div class="bar-track">
         <div class="bar-fill" style="width:${(count/max)*100}%;background:${colors[name]||'#f7a01a'}"></div>
       </div>
@@ -153,8 +166,8 @@ function renderHistory(history) {
     const dateStr = new Date(h.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
     return `<div class="history-item">
       <div>
-        <div class="history-title">${h.title || 'Unknown Problem'}</div>
-        <div class="history-platforms"> ${(h.platforms||[]).join(', ') || 'unknown'}</div>
+        <div class="history-title">${escapeHTML(h.title || 'Unknown Problem')}</div>
+        <div class="history-platforms"> ${escapeHTML((h.platforms||[]).join(', ') || 'unknown')}</div>
       </div>
       <div class="history-date">${dateStr}</div>
     </div>`;
