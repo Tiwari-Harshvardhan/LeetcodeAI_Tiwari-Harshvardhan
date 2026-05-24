@@ -10,8 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from twilio.rest import Client
 
-# --- UPDATED AI PATH ---
 from ai_core.blog_generator import generate_blog
+from ai import rate_code_efficiency
 from devto import publish_to_platforms
 from models.reminder import PublishRecord
 from services.reminder_scheduler import start_scheduler
@@ -60,6 +60,12 @@ class Problem(BaseModel):
     publish_as_draft: bool = False
     share_to_social: bool = True
     tags: list[str] | None = None
+
+
+class EfficiencyRequest(BaseModel):
+    title: str
+    code: str
+    language: str = "python"
 
 
 class ReminderPreference(BaseModel):
@@ -129,9 +135,9 @@ async def create_blog(problem: Problem):
         blog_content = generate_blog(problem)
     except Exception as e:
         return {
-                "status": "error",
-                "message": f"AI provider failure: {str(e)}"
-            }
+            "status": "error",
+            "message": f"AI provider failure: {str(e)}"
+        }
 
     try:
         platform_results = publish_to_platforms(
@@ -177,7 +183,6 @@ async def create_blog(problem: Problem):
 
     social_results = []
     if problem.share_to_social and successful:
-        # Find the first URL to share from successful platforms
         post_url = None
         for res in successful:
             if res.get("url"):
@@ -202,6 +207,51 @@ async def create_blog(problem: Problem):
             "social": social_results,
         },
     }
+
+
+# -----------------------------
+# Code Efficiency Rater Endpoint
+# -----------------------------
+@app.post("/rate-efficiency")
+def evaluate_code_efficiency(request: EfficiencyRequest):
+    """
+    Accepts a LeetCode solution and returns an AI-generated efficiency report.
+
+    Returns:
+    - Score (S / A / B / C / D)
+    - Time and Space complexity
+    - Approach classification (Brute Force / Suboptimal / Optimal)
+    - One-line summary of the approach
+    - A concrete improvement suggestion if applicable
+    """
+    if not request.code or request.code.strip() == "":
+        return {
+            "status": "error",
+            "message": "Code is empty, cannot rate efficiency."
+        }
+
+    if not request.title or request.title.strip() == "":
+        return {
+            "status": "error",
+            "message": "Problem title is required for efficiency analysis."
+        }
+
+    try:
+        efficiency_report = rate_code_efficiency(
+            title=request.title,
+            code=request.code,
+            language=request.language,
+        )
+        return {
+            "status": "success",
+            "data": efficiency_report
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Efficiency rating failed: {str(e)}"
+        }
 
 
 # -----------------------------
@@ -281,6 +331,7 @@ async def record_publish(record: PublishRecord):
     )
     return {"status": "ok"}
 
+
 # -----------------------------
 # Reminder Infrastructure
 # -----------------------------
@@ -291,11 +342,10 @@ def reminder_health():
     """
     return {"status": "active", "message": "Reminder call infrastructure is running."}
 
+
 @app.get("/test-whatsapp")
 def test_whatsapp():
     try:
-        import os
-
         from alerts.twilio_service import send_whatsapp_message
         phone = os.getenv("TEST_PHONE_NUMBER")
         if not phone:
@@ -305,11 +355,10 @@ def test_whatsapp():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
 @app.get("/test-call")
 def test_call():
     try:
-        import os
-
         from alerts.elevenlabs_service import generate_audio, generate_message
         from alerts.twilio_service import make_call
 
@@ -330,7 +379,6 @@ def test_call():
             return {"status": "success", "sid": sid, "audio_url": audio_url, "message": "Call initiated successfully with ElevenLabs."}
         except Exception as el_err:
             print("ElevenLabs Error in Test Route:", el_err)
-            # Fallback to Twilio TTS
             phone = os.getenv("TEST_PHONE_NUMBER")
             if not phone:
                 return {"status": "error", "message": "TEST_PHONE_NUMBER is not set in environment."}
