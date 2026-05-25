@@ -11,6 +11,7 @@ motor
 pytz
 pymongo
 tweepy
+openai
 
 # --- Test & Dev Dependencies ---
 pytest
