@@ -3,6 +3,24 @@ let generatedProblemTitle = "";
 let generatedBlog = "";
 
 let progressInterval;
+let generationTimeout;
+function resetGenerationUI() {
+    const btn =
+        document.getElementById("generateBtn");
+
+    const progressContainer =
+        document.getElementById("progressContainer");
+
+    clearInterval(progressInterval);
+
+    if (btn) {
+        btn.disabled = false;
+    }
+
+    if (progressContainer) {
+        progressContainer.style.display = "none";
+    }
+}
 
 function startProgress() {
     const container = document.getElementById('progressContainer');
@@ -10,26 +28,42 @@ function startProgress() {
     const timeEl = document.getElementById('timeLeft');
     const statusEl = document.getElementById('status');
     const textEl = document.getElementById('progressText');
-    
+
     container.style.display = 'block';
     statusEl.style.display = 'none';
-    
+
     let progress = 0;
     let secondsLeft = 15;
-    
+
     bar.style.width = '0%';
     timeEl.innerText = '~15s';
     textEl.innerText = 'Generating & Publishing...';
-    
+
     clearInterval(progressInterval);
+    clearTimeout(generationTimeout);
+
+    generationTimeout = setTimeout(() => {
+        finishProgress(false);
+
+        const statusEl =
+            document.getElementById("status");
+
+        if (statusEl) {
+            statusEl.innerText =
+                "Generation timed out. Please try again.";
+
+            statusEl.className =
+                "error-status";
+        }
+    }, 30000);
     progressInterval = setInterval(() => {
         progress += (100 / 15) * 0.1; // 0.1s tick
         if (progress > 95) progress = 95; // cap at 95% until done
-        
+
         bar.style.width = progress + '%';
-        
+
         // Update timer every second
-        if (Math.floor(progress * 15 / 100) > Math.floor((progress - (100/15)*0.1) * 15 / 100)) {
+        if (Math.floor(progress * 15 / 100) > Math.floor((progress - (100 / 15) * 0.1) * 15 / 100)) {
             secondsLeft -= 1;
             if (secondsLeft < 1) secondsLeft = 1;
             timeEl.innerText = '~' + secondsLeft + 's';
@@ -39,17 +73,23 @@ function startProgress() {
 
 function finishProgress(success) {
     clearInterval(progressInterval);
+    clearTimeout(generationTimeout);
     const bar = document.getElementById('progressBar');
     const timeEl = document.getElementById('timeLeft');
     if (success) {
         bar.style.width = '100%';
         timeEl.innerText = 'Done!';
+    } else {
+        timeEl.innerText = 'Failed';
     }
     setTimeout(() => {
-        const container = document.getElementById('progressContainer');
-        const statusEl = document.getElementById('status');
-        if (container) container.style.display = 'none';
-        if (statusEl) statusEl.style.display = 'block';
+        resetGenerationUI();
+
+        const statusEl = document.getElementById("status");
+
+        if (statusEl) {
+            statusEl.style.display = "block";
+        }
     }, success ? 1000 : 0);
 }
 
@@ -164,125 +204,122 @@ document.addEventListener('DOMContentLoaded', async () => {
                     .getElementById("blogEditor")
                     .value = generatedBlog;
             }
-    });
+            else {
+                statusEl.innerText = "Ready to generate blog";
+                statusEl.className = "";
+            }
+        });
 
-    statusEl.innerText =
-        "Publishing automation active";
 });
 
 // Generate button
 document.getElementById('generateBtn')
-.addEventListener('click', async () => {
+    .addEventListener('click', async () => {
 
-    const statusEl =
-        document.getElementById('status');
+        const statusEl =
+            document.getElementById('status');
 
-    const btn =
-        document.getElementById('generateBtn');
+        const btn =
+            document.getElementById('generateBtn');
 
-    btn.disabled = true;
+        btn.disabled = true;
 
-    btn.disabled = true;
+        startProgress();
 
-    startProgress();
+        try {
 
-    try {
+            const tabs =
+                await chrome.tabs.query({
+                    active: true,
+                    currentWindow: true
+                });
 
-        const tabs =
-            await chrome.tabs.query({
-                active: true,
-                currentWindow: true
-            });
+            const tab = tabs[0];
 
-        const tab = tabs[0];
+            const customPrompt =
+                document
+                    .getElementById('customPrompt')
+                    .value
+                    .trim();
 
-        const customPrompt =
-            document
-                .getElementById('customPrompt')
-                .value
-                .trim();
+            if (
+                !tab ||
+                !tab.url ||
+                !tab.url.includes(
+                    "leetcode.com/problems/"
+                )
+            ) {
 
-        if (
-            !tab ||
-            !tab.url ||
-            !tab.url.includes(
-                "leetcode.com/problems/"
-            )
-        ) {
+                statusEl.innerText =
+                    "Please open a LeetCode problem page!";
+
+                statusEl.className =
+                    "error-status";
+
+                finishProgress(false);
+
+                return;
+            }
+
+            try {
+
+                await chrome.tabs.sendMessage(
+                    tab.id,
+                    {
+                        type: 'MANUAL_TRIGGER',
+                        custom_prompt: customPrompt
+                    }
+                );
+
+            } catch (msgErr) {
+
+                console.log(
+                    "Re-injecting content script..."
+                );
+
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['content.js']
+                });
+
+                setTimeout(async () => {
+
+                    try {
+
+                        await chrome.tabs.sendMessage(
+                            tab.id,
+                            {
+                                type: 'MANUAL_TRIGGER'
+                            }
+                        );
+
+                    } catch (e2) {
+
+                        statusEl.innerText =
+                            "Error: Please refresh LeetCode page!";
+
+                        statusEl.className =
+                            "error-status";
+
+                        finishProgress(false);
+                    }
+
+                }, 500);
+            }
+
+        } catch (e) {
+
+            console.error("Popup Error:", e);
 
             statusEl.innerText =
-                "Please open a LeetCode problem page!";
+                "Error: " + e.message;
 
             statusEl.className =
                 "error-status";
 
             finishProgress(false);
-            btn.disabled = false;
-
-            return;
         }
-
-        try {
-
-            await chrome.tabs.sendMessage(
-                tab.id,
-                {
-                    type: 'MANUAL_TRIGGER',
-                    custom_prompt: customPrompt
-                }
-            );
-
-        } catch (msgErr) {
-
-            console.log(
-                "Re-injecting content script..."
-            );
-
-            await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content.js']
-            });
-
-            setTimeout(async () => {
-
-                try {
-
-                    await chrome.tabs.sendMessage(
-                        tab.id,
-                        {
-                            type: 'MANUAL_TRIGGER'
-                        }
-                    );
-
-                } catch (e2) {
-
-                    statusEl.innerText =
-                        "Error: Please refresh LeetCode page!";
-
-                    statusEl.className =
-                        "error-status";
-
-                    finishProgress(false);
-                    btn.disabled = false;
-                }
-
-            }, 500);
-        }
-
-    } catch (e) {
-
-        console.error("Popup Error:", e);
-
-        statusEl.innerText =
-            "Error: " + e.message;
-
-        statusEl.className =
-            "error-status";
-
-        finishProgress(false);
-        btn.disabled = false;
-    }
-});
+    });
 
 // Listen for blog ready event
 chrome.runtime.onMessage.addListener((request) => {
@@ -326,11 +363,8 @@ chrome.runtime.onMessage.addListener((request) => {
                         "Blog generated successfully!";
 
                     finishProgress(true);
-                    document
-                        .getElementById("generateBtn")
-                        .disabled = false;
                 }
-        });
+            });
     }
 });
 
@@ -338,187 +372,181 @@ chrome.runtime.onMessage.addListener((request) => {
 chrome.runtime.onMessage.addListener(
     (request) => {
 
-    const statusEl =
-        document.getElementById('status');
+        const statusEl =
+            document.getElementById('status');
 
-    const btn =
-        document.getElementById('generateBtn');
+        const btn =
+            document.getElementById('generateBtn');
 
-    if (request.type === 'STATUS_UPDATE') {
-
-        statusEl.innerText =
-            request.message;
-
-        statusEl.className = "";
-
-        if (request.status === 'success') {
-            finishProgress(true);
+        if (request.type === 'STATUS_UPDATE') {
 
             statusEl.innerText =
-                request.message ||
-                "Successfully posted";
+                request.message;
 
-            statusEl.className =
-                "success-status";
+            statusEl.className = "";
 
-            btn.disabled = false;
+            if (request.status === 'success') {
+                finishProgress(true);
 
-        } else if (
-            request.status === 'error'
-        ) {
-            finishProgress(false);
+                statusEl.innerText =
+                    request.message ||
+                    "Successfully posted";
 
-            statusEl.className =
-                "error-status";
+                statusEl.className =
+                    "success-status";
 
-            btn.disabled = false;
+            } else if (
+                request.status === 'error'
+            ) {
+                finishProgress(false);
 
-        } else if (
-            request.status === 'warning'
-        ) {
-            finishProgress(true);
+                statusEl.className =
+                    "error-status";
 
-            statusEl.className =
-                "warning-status";
+            } else if (
+                request.status === 'warning'
+            ) {
+                finishProgress(true);
 
-            btn.disabled = false;
+                statusEl.className =
+                    "warning-status";
+            }
         }
-    }
-});
+    });
 
 // Dashboard button
 document.getElementById('dashboardBtn')
-.addEventListener('click', () => {
+    .addEventListener('click', () => {
 
-    chrome.tabs.create({
-        url: chrome.runtime.getURL(
-            'dashboard.html'
-        )
+        chrome.tabs.create({
+            url: chrome.runtime.getURL(
+                'dashboard.html'
+            )
+        });
     });
-});
 
 // Export Markdown
 document
-.getElementById("exportMarkdownBtn")
-?.addEventListener("click", () => {
+    .getElementById("exportMarkdownBtn")
+    ?.addEventListener("click", () => {
 
-    const blob = new Blob(
-        [generatedBlogMarkdown],
-        { type: "text/markdown" }
-    );
+        const blob = new Blob(
+            [generatedBlogMarkdown],
+            { type: "text/markdown" }
+        );
 
-    const url =
-        URL.createObjectURL(blob);
+        const url =
+            URL.createObjectURL(blob);
 
-    const a =
-        document.createElement("a");
+        const a =
+            document.createElement("a");
 
-    a.href = url;
+        a.href = url;
 
-    a.download =
-        `${generatedProblemTitle}.md`;
+        a.download =
+            `${generatedProblemTitle}.md`;
 
-    a.click();
+        a.click();
 
-    URL.revokeObjectURL(url);
-});
+        URL.revokeObjectURL(url);
+    });
 
 // Export HTML
 document
-.getElementById("exportHTMLBtn")
-?.addEventListener("click", () => {
+    .getElementById("exportHTMLBtn")
+    ?.addEventListener("click", () => {
 
-    const html =
-        convertMarkdownToHTML(
-            generatedBlogMarkdown
+        const html =
+            convertMarkdownToHTML(
+                generatedBlogMarkdown
+            );
+
+        const blob = new Blob(
+            [html],
+            { type: "text/html" }
         );
 
-    const blob = new Blob(
-        [html],
-        { type: "text/html" }
-    );
+        const url =
+            URL.createObjectURL(blob);
 
-    const url =
-        URL.createObjectURL(blob);
+        const a =
+            document.createElement("a");
 
-    const a =
-        document.createElement("a");
+        a.href = url;
 
-    a.href = url;
+        a.download =
+            `${generatedProblemTitle}.html`;
 
-    a.download =
-        `${generatedProblemTitle}.html`;
+        a.click();
 
-    a.click();
-
-    URL.revokeObjectURL(url);
-});
+        URL.revokeObjectURL(url);
+    });
 
 // Export PDF
 document
-.getElementById("exportPDFBtn")
-?.addEventListener("click", () => {
+    .getElementById("exportPDFBtn")
+    ?.addEventListener("click", () => {
 
-    const container =
-        document.createElement("div");
+        const container =
+            document.createElement("div");
 
-    container.style.padding =
-        "20px";
+        container.style.padding =
+            "20px";
 
-    container.innerHTML =
-        convertMarkdownToHTML(
-            generatedBlogMarkdown
-        );
+        container.innerHTML =
+            convertMarkdownToHTML(
+                generatedBlogMarkdown
+            );
 
-    html2pdf()
-        .set({
-            margin: 0.5,
-            filename:
-                `${generatedProblemTitle}.pdf`,
-            image: {
-                type: "jpeg",
-                quality: 1
-            },
-            html2canvas: {
-                scale: 2
-            },
-            jsPDF: {
-                unit: "in",
-                format: "a4",
-                orientation: "portrait"
-            }
-        })
-        .from(container)
-        .save();
-});
+        html2pdf()
+            .set({
+                margin: 0.5,
+                filename:
+                    `${generatedProblemTitle}.pdf`,
+                image: {
+                    type: "jpeg",
+                    quality: 1
+                },
+                html2canvas: {
+                    scale: 2
+                },
+                jsPDF: {
+                    unit: "in",
+                    format: "a4",
+                    orientation: "portrait"
+                }
+            })
+            .from(container)
+            .save();
+    });
 
 // Publish button
 document
-.getElementById("publishBtn")
-?.addEventListener("click", async () => {
+    .getElementById("publishBtn")
+    ?.addEventListener("click", async () => {
 
-    const editedBlog =
+        const editedBlog =
+            document
+                .getElementById("blogEditor")
+                .value;
+
+        chrome.runtime.sendMessage({
+            type: "PUBLISH_EDITED_BLOG",
+            blog: editedBlog
+        });
+
         document
-            .getElementById("blogEditor")
-            .value;
-
-    chrome.runtime.sendMessage({
-        type: "PUBLISH_EDITED_BLOG",
-        blog: editedBlog
+            .getElementById("status")
+            .innerText =
+            "Publishing edited blog...";
     });
-
-    document
-        .getElementById("status")
-        .innerText =
-        "Publishing edited blog...";
-});
 
 // Cancel button
 document
-.getElementById("cancelPreviewBtn")
-?.addEventListener("click", () => {
+    .getElementById("cancelPreviewBtn")
+    ?.addEventListener("click", () => {
 
-    document
-        .getElementById("previewSection")
-        .style.display = "none";
-});
+        document
+            .getElementById("previewSection")
+            .style.display = "none";
+    });
