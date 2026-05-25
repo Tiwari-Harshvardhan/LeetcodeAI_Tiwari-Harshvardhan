@@ -104,16 +104,23 @@ async def create_blog(problem: Problem):
     """
 
     # Check if the user has already published a successful blog for this problem
-    existing_record = await db.problem_info.find_one({
-        "title": problem.title,
-        "author": problem.author,
-        "status": "success"
-    })
+    try:
+        existing_record = await db.problem_info.find_one({
+            "title": problem.title,
+            "author": problem.author,
+            "status": "success"
+        })
 
-    if existing_record:
+        if existing_record:
+            return {
+                "status": "error",
+                "message": f"Solution for '{problem.title}' has already been published! Keep up the great streak!"
+            }
+    except Exception as e:
+        print(f"Database query failed: {e}")
         return {
             "status": "error",
-            "message": f"Solution for '{problem.title}' has already been published! Keep up the great streak!"
+            "message": "Database connection failed. Please ensure MongoDB is running."
         }
 
     if problem.custom_prompt and len(problem.custom_prompt.strip()) > 1000:
