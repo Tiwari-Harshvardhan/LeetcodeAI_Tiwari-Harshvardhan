@@ -39,8 +39,6 @@ async def _check_unsolved_users_async():
         lc_username = user.get("leetcode_username", "vanshaggarwal27")
         if not has_solved and lc_username:
             try:
-                import asyncio
-                import datetime
 
                 import requests
 
@@ -61,7 +59,7 @@ async def _check_unsolved_users_async():
                 submissions = data.get("data", {}).get("recentAcSubmissionList", [])
 
                 # Check if any submission has a timestamp from today (UTC)
-                midnight_utc = datetime.datetime.now(datetime.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+                midnight_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
                 midnight_timestamp = int(midnight_utc.timestamp())
 
                 for sub in submissions:
