@@ -1,13 +1,16 @@
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
 import motor.motor_asyncio
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from pymongo.errors import PyMongoError
 from twilio.rest import Client
 
 # --- UPDATED AI PATH ---
@@ -19,7 +22,22 @@ from social import share_to_platforms
 
 load_dotenv()
 
+logger = logging.getLogger("leetcodeai")
+
 app = FastAPI(title="LeetLog AI", version="1.0.0")
+
+
+@app.exception_handler(PyMongoError)
+async def mongodb_exception_handler(request: Request, exc: PyMongoError):
+    logger.error(f"Database error encountered: {str(exc)}")
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "error",
+            "message": "Database connection failed. Please ensure MongoDB is running.",
+        },
+    )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -105,16 +123,14 @@ async def create_blog(problem: Problem):
     """
 
     # Check if the user has already published a successful blog for this problem
-    existing_record = await db.problem_info.find_one({
-        "title": problem.title,
-        "author": problem.author,
-        "status": "success"
-    })
+    existing_record = await db.problem_info.find_one(
+        {"title": problem.title, "author": problem.author, "status": "success"}
+    )
 
     if existing_record:
         return {
             "status": "error",
-            "message": f"Solution for '{problem.title}' has already been published! Keep up the great streak!"
+            "message": f"Solution for '{problem.title}' has already been published! Keep up the great streak!",
         }
 
     if problem.custom_prompt and len(problem.custom_prompt.strip()) > 1000:
@@ -129,10 +145,7 @@ async def create_blog(problem: Problem):
     try:
         blog_content = generate_blog(problem)
     except Exception as e:
-        return {
-                "status": "error",
-                "message": f"AI provider failure: {str(e)}"
-            }
+        return {"status": "error", "message": f"AI provider failure: {str(e)}"}
 
     try:
         platform_results = publish_to_platforms(
@@ -188,9 +201,7 @@ async def create_blog(problem: Problem):
         if post_url:
             try:
                 social_results = share_to_platforms(
-                    title=problem.title,
-                    post_url=post_url,
-                    tags=problem.tags
+                    title=problem.title, post_url=post_url, tags=problem.tags
                 )
             except Exception as e:
                 print(f"Social sharing failed: {e}")
@@ -271,16 +282,12 @@ async def get_dashboard_history(
 @app.post("/dashboard/record")
 async def record_publish(record: PublishRecord):
     await db.problem_info.update_one(
-        {
-            "title": record.title,
-            "author": record.author
-        },
-        {
-            "$set": record.model_dump()
-        },
-        upsert=True
+        {"title": record.title, "author": record.author},
+        {"$set": record.model_dump()},
+        upsert=True,
     )
     return {"status": "ok"}
+
 
 # -----------------------------
 # Reminder Infrastructure
@@ -292,19 +299,32 @@ def reminder_health():
     """
     return {"status": "active", "message": "Reminder call infrastructure is running."}
 
+
 @app.get("/test-whatsapp")
 def test_whatsapp():
     try:
         import os
 
         from alerts.twilio_service import send_whatsapp_message
+
         phone = os.getenv("TEST_PHONE_NUMBER")
         if not phone:
-            return {"status": "error", "message": "TEST_PHONE_NUMBER is not set in environment."}
-        sid = send_whatsapp_message(phone, "Hello Vansh! Your Twilio WhatsApp integration on Render is working perfectly! 🚀")
-        return {"status": "success", "sid": sid, "message": "WhatsApp message sent successfully."}
+            return {
+                "status": "error",
+                "message": "TEST_PHONE_NUMBER is not set in environment.",
+            }
+        sid = send_whatsapp_message(
+            phone,
+            "Hello Vansh! Your Twilio WhatsApp integration on Render is working perfectly! 🚀",
+        )
+        return {
+            "status": "success",
+            "sid": sid,
+            "message": "WhatsApp message sent successfully.",
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
 
 @app.get("/test-call")
 def test_call():
@@ -318,26 +338,44 @@ def test_call():
 
         try:
             audio_file = generate_audio(message)
-            backend_url = os.getenv("BACKEND_URL", "https://leetcodeai-backend.onrender.com")
+            backend_url = os.getenv(
+                "BACKEND_URL", "https://leetcodeai-backend.onrender.com"
+            )
             if backend_url.endswith("/"):
                 backend_url = backend_url[:-1]
             audio_url = f"{backend_url}/{audio_file}"
 
             phone = os.getenv("TEST_PHONE_NUMBER")
             if not phone:
-                return {"status": "error", "message": "TEST_PHONE_NUMBER is not set in environment."}
+                return {
+                    "status": "error",
+                    "message": "TEST_PHONE_NUMBER is not set in environment.",
+                }
 
             sid = make_call(phone, audio_url=audio_url)
-            return {"status": "success", "sid": sid, "audio_url": audio_url, "message": "Call initiated successfully with ElevenLabs."}
+            return {
+                "status": "success",
+                "sid": sid,
+                "audio_url": audio_url,
+                "message": "Call initiated successfully with ElevenLabs.",
+            }
         except Exception as el_err:
             print("ElevenLabs Error in Test Route:", el_err)
             # Fallback to Twilio TTS
             phone = os.getenv("TEST_PHONE_NUMBER")
             if not phone:
-                return {"status": "error", "message": "TEST_PHONE_NUMBER is not set in environment."}
+                return {
+                    "status": "error",
+                    "message": "TEST_PHONE_NUMBER is not set in environment.",
+                }
 
             sid = make_call(phone, text_to_say=message)
-            return {"status": "success", "sid": sid, "message": "ElevenLabs failed (Free Tier VPN block), but Twilio TTS call initiated successfully.", "elevenlabs_error": str(el_err)}
+            return {
+                "status": "success",
+                "sid": sid,
+                "message": "ElevenLabs failed (Free Tier VPN block), but Twilio TTS call initiated successfully.",
+                "elevenlabs_error": str(el_err),
+            }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -345,7 +383,9 @@ def test_call():
 @app.post("/reminder/subscribe")
 async def subscribe(pref: ReminderPreference):
     await db.preferences.update_one(
-        {"whatsapp_number": pref.whatsapp_number}, {"$set": pref.model_dump()}, upsert=True
+        {"whatsapp_number": pref.whatsapp_number},
+        {"$set": pref.model_dump()},
+        upsert=True,
     )
     return {"status": "success", "message": "Subscribed!"}
 
@@ -362,9 +402,4 @@ async def unsubscribe(data: dict):
 # Run Server
 # -----------------------------
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=10000,
-        reload=True
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
