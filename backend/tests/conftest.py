@@ -160,6 +160,38 @@ def mock_devto_request(mocker):
 
 
 @pytest.fixture
+def mock_hashnode_request(mocker):
+    """
+    Mocks requests.post for HashnodePublisher tests.
+
+    Default return value is a successful GraphQL response.
+    Individual tests can override ``response.json.return_value`` to simulate
+    GraphQL error payloads without making real network calls or needing API keys.
+    """
+    devto_module = importlib.import_module("devto")
+    response = Mock(name="hashnode_response")
+    response.status_code = 200
+    response.json.return_value = {
+        "data": {
+            "publishPost": {
+                "post": {
+                    "id": "hn-post-123",
+                    "url": "https://username.hashnode.dev/leetcode-solution-two-sum",
+                    "title": "LeetCode Solution: Two Sum",
+                }
+            }
+        }
+    }
+    request_mock = mocker.patch.object(
+        devto_module.requests,
+        "post",
+        autospec=True,
+        return_value=response,
+    )
+    return {"request": request_mock, "response": response}
+
+
+@pytest.fixture
 def responses_mock():
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         yield rsps

@@ -150,6 +150,16 @@ class HashnodePublisher(BasePublisher):
             },
             platform="Hashnode",
         )
+
+        # GraphQL APIs return HTTP 200 even when an operation fails.
+        # Detect and raise on GraphQL-level errors before treating the
+        # response as a successful publish.
+        graphql_errors = response.get("errors")
+        if graphql_errors:
+            first_error = graphql_errors[0] if isinstance(graphql_errors[0], dict) else {}
+            message = first_error.get("message", "Unknown Hashnode GraphQL error")
+            raise PublisherError(f"Hashnode publish failed: {message}")
+
         post = response.get("data", {}).get("publishPost", {}).get("post", {})
         return PublishResult(
             platform=self.platform,
