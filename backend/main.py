@@ -9,6 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from twilio.rest import Client
+from fastapi.responses import JSONResponse
+from pymongo.errors import PyMongoError
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --- UPDATED AI PATH ---
 from ai_core.blog_generator import generate_blog
@@ -20,6 +25,18 @@ from social import share_to_platforms
 load_dotenv()
 
 app = FastAPI(title="LeetLog AI", version="1.0.0")
+
+@app.exception_handler(PyMongoError)
+async def mongodb_exception_handler(request, exc: PyMongoError):
+    logger.error(f"Database error encountered: {str(exc)}") 
+    
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "error", 
+            "message": "Database connection failed. Please ensure MongoDB is running."
+        }
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -104,23 +121,16 @@ async def create_blog(problem: Problem):
     """
 
     # Check if the user has already published a successful blog for this problem
-    try:
-        existing_record = await db.problem_info.find_one({
-            "title": problem.title,
-            "author": problem.author,
-            "status": "success"
-        })
+    existing_record = await db.problem_info.find_one({
+        "title": problem.title,
+        "author": problem.author,
+        "status": "success"
+    })
 
-        if existing_record:
-            return {
-                "status": "error",
-                "message": f"Solution for '{problem.title}' has already been published! Keep up the great streak!"
-            }
-    except Exception as e:
-        print(f"Database query failed: {e}")
+    if existing_record:
         return {
             "status": "error",
-            "message": "Database connection failed. Please ensure MongoDB is running."
+            "message": f"Solution for '{problem.title}' has already been published! Keep up the great streak!"
         }
 
     if problem.custom_prompt and len(problem.custom_prompt.strip()) > 1000:
