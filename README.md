@@ -18,7 +18,7 @@
 
 **LeetLog AI** is a Chrome Extension with a Python FastAPI backend that automatically generates and publishes technical blog posts whenever you solve a LeetCode problem.
 
-It extracts the problem statement, solution code, and author details directly from the LeetCode page, then uses Google Gemini AI to generate a beginner-friendly and structured blog post.
+It extracts the problem statement, solution code, and author details directly from the LeetCode page, then uses AI providers like Gemini, OpenAI, or Perplexity to generate a beginner-friendly and structured blog post.
 
 The generated content can be published to platforms like Dev.to, Hashnode, Medium, or even a custom blog webhook — helping developers share their coding journey quickly and consistently.
 
@@ -30,7 +30,7 @@ No manual copy-pasting or formatting required — just solve the problem and let
 
 | Feature | Description |
 |---|---|
-| 🤖 **AI Blog Generation** | Gemini generates a structured post: explanation, intuition, approach, code, complexity analysis |
+| 🤖 **AI Blog Generation** | Gemini, OpenAI, or Perplexity generate a structured post: explanation, intuition, approach, code, complexity analysis |
 | 📤 **Multi-platform publishing** | Posts can be published to Dev.to, Hashnode, Medium, or a custom blog webhook |
 | 🧭 **Platform selection** | Choose publishing targets from the extension popup before generating a post |
 | 📊 **Per-platform status** | The backend reports success or failure for each selected platform independently |
@@ -46,13 +46,13 @@ No manual copy-pasting or formatting required — just solve the problem and let
 ┌─────────────────────────┐        ┌─────────────────────────────┐
 │   Chrome Extension      │        │   FastAPI Backend (Python)  │
 │                         │        │                             │
-│  content.js             │──POST──▶  /generate-blog             │
+│  content.js             │─POST─▶|  /generate-blog             │
 │  (scrapes LeetCode page)│        │       │                     │
 │                         │        │       ▼                     │
-│  background.js          │        │   ai.py (Gemini API)        │
+│  background.js          │        │   ai/ (Provider System)     │
 │  (sends to backend)     │        │       │                     │
 │                         │        │       ▼                     │
-│  popup.html / popup.js  │◀─JSON──│   devto.py (publishers)     │
+│  popup.html / popup.js  │◀─JSON─│   devto.py (publishers)     │
 │  (shows status)         │        │                             │
 └─────────────────────────┘        └─────────────────────────────┘
 ```
@@ -65,7 +65,10 @@ No manual copy-pasting or formatting required — just solve the problem and let
 
 - Python 3.10+
 - Google Chrome (for the extension)
-- A [Google Gemini API Key](https://aistudio.google.com/app/apikey)
+- At least one AI provider API key:
+  - [Google Gemini API Key](https://aistudio.google.com/app/apikey)
+  - [OpenAI API Key](https://platform.openai.com/api-keys)
+  - [Perplexity API Key](https://www.perplexity.ai/settings/api)
 - At least one publishing API key:
   - [Dev.to API Key](https://dev.to/settings/extensions) (Account → Settings → API Keys)
   - Hashnode token + publication ID
@@ -102,13 +105,22 @@ pip install -r requirements.txt
 
 ```bash
 # backend/.env
+# backend/.env
+
+# value can be gemini || openai || perplexity
+AI_PROVIDER=gemini
+
 GEMINI_API_KEY=your_google_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+PERPLEXITY_API_KEY=your_perplexity_api_key_here
+
 DEVTO_API_KEY=your_devto_api_key_here
-HASHNODE_TOKEN=your_hashnode_token_here
-HASHNODE_PUBLICATION_ID=your_hashnode_publication_id_here
-MEDIUM_TOKEN=your_medium_integration_token_here
-MEDIUM_USER_ID=your_medium_user_id_here
-BLOG_WEBHOOK_URL=https://your-blog.example.com/api/publish
+
+TWILIO_ACCOUNT_SID=your_twilio_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_PHONE_NUMBER=your_twilio_phone_number
+
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
 ```
 
 > ⚠️ **Never commit your `.env` file.** It is already listed in `.gitignore`.
@@ -152,10 +164,19 @@ LeetcodeAI/
 │
 ├── backend/                  # Python FastAPI server
 │   ├── main.py               # FastAPI entry point and API routes
-│   ├── ai.py                 # Gemini AI prompt generation and response handling
-│   ├── devto.py              # Publishing provider registry and clients
 │   ├── requirements.txt      # Python dependencies
-│   └── .env                  # ⚠️ Your secrets (NOT committed)
+│   ├── .env                  # ⚠️ Your secrets (NOT committed)
+│   │
+│   ├── ai
+│   │   ├── blog_generator.py
+│   │   ├── __init__.py
+│   │   ├── prompts.py
+│   │   ├── provider_manager.py
+│   │   └── providers
+│   │       ├── base.py
+│   │       ├── gemini_provider.py
+│   │       ├── openai_provider.py
+│   │       └── perplexity_provider.py
 │
 ├── extension/                # Chrome Extension (MV3)
 │   ├── manifest.json         # Extension config
@@ -178,7 +199,7 @@ Here is a checklist of features that would be incredibly useful for the communit
 - [ ] **WhatsApp Reminder Service**: Send automated daily reminders to solve LeetCode problems using the **Twilio API**.
 - [ ] **Automated Call Alerts**: Trigger automated phone calls using **ElevenLabs** and Twilio if a user hasn't solved their daily problem by a specific time.
 - [x] **Multi-platform Publishing**: Support publishing generated blogs to Dev.to, Medium, Hashnode, and custom personal blog webhooks.
-- [ ] **Customizable Prompts**: Allow users to configure the prompt used by Gemini so they can customize the tone and style of the generated blog post.
+- [ ] **Customizable Prompts**: Allow users to configure prompts for Gemini, OpenAI, or Perplexity so they can customize the tone and style of generated blog posts.
 - [ ] **Support for Other Coding Platforms**: Extend support to platforms like HackerRank, Codeforces, or GeeksforGeeks.
 - [ ] **Dashboard/Stats Page**: Create a simple dashboard to track the number of problems solved, posts published, and consistency streaks.
 - [ ] **Social Sharing**: Automatically share the published Dev.to post to Twitter/X or LinkedIn.
@@ -193,7 +214,7 @@ The backend can be deployed for free on [Render](https://render.com/).
 2. Create a new **Web Service** on Render
 3. Set **Build Command**: `pip install -r requirements.txt`
 4. Set **Start Command**: `uvicorn main:app --host 0.0.0.0 --port 10000`
-5. Add your environment variables (`GEMINI_API_KEY` and the API keys for your selected publishing platforms) in the Render dashboard
+5. Add your environment variables (`AI_PROVIDER`, AI API keys, and publishing platform API keys) in the Render dashboard
 6. Copy your public Render URL and update `API_URL` in `extension/background.js`
 
 ---
@@ -217,7 +238,9 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 ## 🙏 Acknowledgements
 
-- [Google Gemini](https://deepmind.google/technologies/gemini/) — AI blog generation
+- [Google Gemini](https://deepmind.google/technologies/gemini/) — AI provider
+- [OpenAI](https://platform.openai.com/) — AI provider
+- [Perplexity AI](https://www.perplexity.ai/) — AI provider
 - [Dev.to API](https://developers.forem.com/api), Hashnode, Medium, and custom webhooks — Publishing platforms
 - [FastAPI](https://fastapi.tiangolo.com/) — Backend framework
 - All GSSoC contributors 💪

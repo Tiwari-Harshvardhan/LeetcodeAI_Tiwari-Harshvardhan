@@ -30,6 +30,8 @@ class FakePreferencesCollection:
 class FakeProblemInfoCollection:
     def __init__(self) -> None:
         self.find_one = AsyncMock(return_value=None)
+        self.update_one = AsyncMock()
+        self.count_documents = AsyncMock(return_value=0)
 
 
 class FakeDatabase:
@@ -45,7 +47,7 @@ class FakeMotorClient:
 
 @pytest.fixture(autouse=True)
 def test_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    # monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setenv("DEVTO_API_KEY", "test-devto-key")
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "test-twilio-sid")
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "test-twilio-token")
@@ -152,17 +154,17 @@ def mock_gemini_client(mocker):
 
 @pytest.fixture
 def mock_devto_request(mocker):
-    devto_module = importlib.import_module("devto")
-    response = Mock(name="devto_response")
+    import httpx
+
+    response = mocker.Mock(spec=httpx.Response)
     response.status_code = 201
     response.json.return_value = {"id": 123, "url": "https://dev.to/mock-post"}
-    request_mock = mocker.patch.object(
-        devto_module.requests,
-        "post",
-        autospec=True,
-        return_value=response,
-    )
-    return {"request": request_mock, "response": response}
+    response.text = "mock text"
+
+    mock_post = mocker.AsyncMock(return_value=response)
+    mocker.patch("httpx.AsyncClient.post", new=mock_post)
+
+    return {"request": mock_post, "response": response}
 
 
 @pytest.fixture

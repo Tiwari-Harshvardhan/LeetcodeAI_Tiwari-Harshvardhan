@@ -5,12 +5,19 @@ import motor.motor_asyncio
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from twilio.rest import Client
+from fastapi.responses import JSONResponse
+from pymongo.errors import PyMongoError
+import logging
 
-from ai import generate_blog
+logger = logging.getLogger(__name__)
+
+from ai_core.blog_generator import generate_blog
+from ai import rate_code_efficiency
 from devto import publish_to_platforms
 from models.reminder import PublishRecord
 from services.reminder_scheduler import start_scheduler
@@ -19,6 +26,18 @@ from social import share_to_platforms
 load_dotenv()
 
 app = FastAPI(title="LeetLog AI", version="1.0.0")
+
+@app.exception_handler(PyMongoError)
+async def mongodb_exception_handler(request, exc: PyMongoError):
+    logger.error(f"Database error encountered: {str(exc)}") 
+    
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "error", 
+            "message": "Database connection failed. Please ensure MongoDB is running."
+        }
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,10 +74,17 @@ class Problem(BaseModel):
     author: str = "Anonymous Developer"
     client_time: str = None  # Optional client time string
     custom_prompt: str = None  # custom_prompt for the user
+    difficulty: str = "Unknown"  # difficulty level of the problem
     platforms: list[str] | None = None
     publish_as_draft: bool = False
     share_to_social: bool = True
     tags: list[str] | None = None
+
+
+class EfficiencyRequest(BaseModel):
+    title: str
+    code: str
+    language: str = "python"
 
 
 class ReminderPreference(BaseModel):
@@ -76,7 +102,6 @@ async def startup_event():
     """
     Start background schedulers when server starts.
     """
-
     try:
         start_scheduler()
         print("Reminder scheduler started successfully.")
@@ -99,7 +124,7 @@ def health_check():
 async def create_blog(problem: Problem):
     """
     Accepts a LeetCode problem and:
-    1. Generates a blog using Gemini AI
+    1. Generates a blog using the unified ai.providers module
     2. Publishes it to one or more configured platforms
     """
 
@@ -126,13 +151,16 @@ async def create_blog(problem: Problem):
         return {"status": "error", "message": "Code is empty, cannot generate blog."}
 
     try:
-        blog_content = generate_blog(problem)
+        blog_content = await run_in_threadpool(generate_blog, problem)
 
     except Exception as e:
-        return {"status": "error", "message": f"Gemini API failure: {str(e)}"}
+        return {
+            "status": "error",
+            "message": f"AI provider failure: {str(e)}"
+        }
 
     try:
-        platform_results = publish_to_platforms(
+        platform_results = await publish_to_platforms(
             problem.title,
             blog_content,
             platforms=problem.platforms,
@@ -158,7 +186,6 @@ async def create_blog(problem: Problem):
             status=overall_status,
             author=problem.author,
         )
-
         await db.problem_info.update_one(
             {
                 "title": problem.title,
@@ -169,13 +196,11 @@ async def create_blog(problem: Problem):
             },
             upsert=True,
         )
-
     except Exception as e:
         print(f"Database logging failed: {e}")
 
     social_results = []
     if problem.share_to_social and successful:
-        # Find the first URL to share from successful platforms
         post_url = None
         for res in successful:
             if res.get("url"):
@@ -202,7 +227,54 @@ async def create_blog(problem: Problem):
     }
 
 
-# dashboard endpoints
+# -----------------------------
+# Code Efficiency Rater Endpoint
+# -----------------------------
+@app.post("/rate-efficiency")
+def evaluate_code_efficiency(request: EfficiencyRequest):
+    """
+    Accepts a LeetCode solution and returns an AI-generated efficiency report.
+
+    Returns:
+    - Score (S / A / B / C / D)
+    - Time and Space complexity
+    - Approach classification (Brute Force / Suboptimal / Optimal)
+    - One-line summary of the approach
+    - A concrete improvement suggestion if applicable
+    """
+    if not request.code or request.code.strip() == "":
+        return {
+            "status": "error",
+            "message": "Code is empty, cannot rate efficiency."
+        }
+
+    if not request.title or request.title.strip() == "":
+        return {
+            "status": "error",
+            "message": "Problem title is required for efficiency analysis."
+        }
+
+    try:
+        efficiency_report = rate_code_efficiency(
+            title=request.title,
+            code=request.code,
+            language=request.language,
+        )
+        return {
+            "status": "success",
+            "data": efficiency_report
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Efficiency rating failed: {str(e)}"
+        }
+
+
+# -----------------------------
+# Dashboard Endpoints
+# -----------------------------
 @app.get("/dashboard/stats")
 async def get_dashboard_stats():
     total = await db.problem_info.count_documents({})
@@ -278,7 +350,6 @@ async def record_publish(record: PublishRecord):
     return {"status": "ok"}
 
 
-
 # -----------------------------
 # Reminder Infrastructure
 # -----------------------------
@@ -287,14 +358,12 @@ def reminder_health():
     """
     Health check endpoint for reminder services.
     """
-
     return {"status": "active", "message": "Reminder call infrastructure is running."}
+
 
 @app.get("/test-whatsapp")
 def test_whatsapp():
     try:
-        import os
-
         from alerts.twilio_service import send_whatsapp_message
         phone = os.getenv("TEST_PHONE_NUMBER")
         if not phone:
@@ -304,24 +373,36 @@ def test_whatsapp():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
 @app.get("/test-call")
 def test_call():
     try:
-        import os
-
-        from alerts.elevenlabs_service import generate_audio
+        from alerts.elevenlabs_service import generate_audio, generate_message
         from alerts.twilio_service import make_call
 
-        message = "Hello Vansh, this is a test call from your LeetCode AI backend. Keep coding!"
-        audio_file = generate_audio(message)
+        message = generate_message("Vansh")
 
-        backend_url = os.getenv("BACKEND_URL", "https://leetcodeai-backend.onrender.com")
-        if backend_url.endswith("/"):
-            backend_url = backend_url[:-1]
+        try:
+            audio_file = generate_audio(message)
+            backend_url = os.getenv("BACKEND_URL", "https://leetcodeai-backend.onrender.com")
+            if backend_url.endswith("/"):
+                backend_url = backend_url[:-1]
+            audio_url = f"{backend_url}/{audio_file}"
 
-        audio_url = f"{backend_url}/{audio_file}"
-        sid = make_call("+917819834452", audio_url)
-        return {"status": "success", "sid": sid, "audio_url": audio_url, "message": "Call initiated successfully."}
+            phone = os.getenv("TEST_PHONE_NUMBER")
+            if not phone:
+                return {"status": "error", "message": "TEST_PHONE_NUMBER is not set in environment."}
+
+            sid = make_call(phone, audio_url=audio_url)
+            return {"status": "success", "sid": sid, "audio_url": audio_url, "message": "Call initiated successfully with ElevenLabs."}
+        except Exception as el_err:
+            print("ElevenLabs Error in Test Route:", el_err)
+            phone = os.getenv("TEST_PHONE_NUMBER")
+            if not phone:
+                return {"status": "error", "message": "TEST_PHONE_NUMBER is not set in environment."}
+
+            sid = make_call(phone, text_to_say=message)
+            return {"status": "success", "sid": sid, "message": "ElevenLabs failed (Free Tier VPN block), but Twilio TTS call initiated successfully.", "elevenlabs_error": str(el_err)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -329,9 +410,8 @@ def test_call():
 @app.post("/reminder/subscribe")
 async def subscribe(pref: ReminderPreference):
     await db.preferences.update_one(
-        {"whatsapp_number": pref.whatsapp_number}, {"$set": pref.dict()}, upsert=True
+        {"whatsapp_number": pref.whatsapp_number}, {"$set": pref.model_dump()}, upsert=True
     )
-
     return {"status": "success", "message": "Subscribed!"}
 
 
@@ -340,7 +420,6 @@ async def unsubscribe(data: dict):
     await db.preferences.update_one(
         {"whatsapp_number": data["whatsapp_number"]}, {"$set": {"is_opted_in": False}}
     )
-
     return {"status": "success", "message": "Unsubscribed!"}
 
 
@@ -348,4 +427,9 @@ async def unsubscribe(data: dict):
 # Run Server
 # -----------------------------
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=10000,
+        reload=True
+    )
