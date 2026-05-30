@@ -1,15 +1,14 @@
+import asyncio
 import os
-import time
 from dataclasses import dataclass
 from typing import Any
 
-import requests
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DEFAULT_TAGS = ["leetcode", "dsa", "programming", "tutorial"]
-
 
 @dataclass(frozen=True)
 class PublishResult:
@@ -26,10 +25,10 @@ class PublishResult:
         }
         if self.url:
             payload["url"] = self.url
-        if self.response is not None:
-            payload["response"] = self.response
         if self.message:
             payload["message"] = self.message
+        if self.response:
+            payload["response"] = self.response
         return payload
 
 
@@ -40,13 +39,13 @@ class PublisherError(Exception):
 class BasePublisher:
     platform = "base"
 
-    def publish(
+    async def publish(
         self, title: str, content: str, *, tags: list[str], published: bool
     ) -> PublishResult:
         raise NotImplementedError
 
     @staticmethod
-    def _post_with_retries(
+    async def _post_with_retries(
         url: str,
         *,
         headers: dict[str, str],
@@ -54,26 +53,27 @@ class BasePublisher:
         platform: str,
         retries: int = 2,
     ) -> dict[str, Any]:
-        for attempt in range(retries + 1):
-            try:
-                response = requests.post(url, headers=headers, json=payload, timeout=20)
-                if response.status_code in (200, 201):
-                    return response.json()
-                if attempt == retries:
-                    raise PublisherError(
-                        f"{platform} API Error {response.status_code}: {response.text}"
-                    )
-            except requests.RequestException as exc:
-                if attempt == retries:
-                    raise PublisherError(f"{platform} network error: {exc}") from exc
-            time.sleep(1)
-        raise PublisherError(f"{platform} API request failed.")
+        async with httpx.AsyncClient() as client:
+            for attempt in range(retries + 1):
+                try:
+                    response = await client.post(url, headers=headers, json=payload, timeout=20.0)
+                    if response.status_code in (200, 201):
+                        return response.json()
+                    if attempt == retries:
+                        raise PublisherError(
+                            f"{platform} API Error {response.status_code}: {response.text}"
+                        )
+                except httpx.RequestError as exc:
+                    if attempt == retries:
+                        raise PublisherError(f"{platform} network error: {exc}") from exc
+                await asyncio.sleep(1)
+            raise PublisherError(f"{platform} API request failed.")
 
 
 class DevToPublisher(BasePublisher):
     platform = "devto"
 
-    def publish(
+    async def publish(
         self, title: str, content: str, *, tags: list[str], published: bool
     ) -> PublishResult:
         api_key = os.getenv("DEVTO_API_KEY")
@@ -82,7 +82,7 @@ class DevToPublisher(BasePublisher):
                 "Dev.to API key missing. Please set DEVTO_API_KEY in .env."
             )
 
-        response = self._post_with_retries(
+        response = await self._post_with_retries(
             "https://dev.to/api/articles",
             headers={
                 "api-key": api_key,
@@ -109,7 +109,7 @@ class DevToPublisher(BasePublisher):
 class HashnodePublisher(BasePublisher):
     platform = "hashnode"
 
-    def publish(
+    async def publish(
         self, title: str, content: str, *, tags: list[str], published: bool
     ) -> PublishResult:
         token = os.getenv("HASHNODE_TOKEN")
@@ -130,7 +130,7 @@ class HashnodePublisher(BasePublisher):
           }
         }
         """
-        response = self._post_with_retries(
+        response = await self._post_with_retries(
             "https://gql.hashnode.com/",
             headers={
                 "Authorization": token,
@@ -150,6 +150,16 @@ class HashnodePublisher(BasePublisher):
             },
             platform="Hashnode",
         )
+
+        # GraphQL APIs return HTTP 200 even when an operation fails.
+        # Detect and raise on GraphQL-level errors before treating the
+        # response as a successful publish.
+        graphql_errors = response.get("errors")
+        if graphql_errors:
+            first_error = graphql_errors[0] if isinstance(graphql_errors[0], dict) else {}
+            message = first_error.get("message", "Unknown Hashnode GraphQL error")
+            raise PublisherError(f"Hashnode publish failed: {message}")
+
         post = response.get("data", {}).get("publishPost", {}).get("post", {})
         return PublishResult(
             platform=self.platform,
@@ -162,7 +172,7 @@ class HashnodePublisher(BasePublisher):
 class MediumPublisher(BasePublisher):
     platform = "medium"
 
-    def publish(
+    async def publish(
         self, title: str, content: str, *, tags: list[str], published: bool
     ) -> PublishResult:
         token = os.getenv("MEDIUM_TOKEN")
@@ -172,7 +182,7 @@ class MediumPublisher(BasePublisher):
                 "Medium publishing requires MEDIUM_TOKEN and MEDIUM_USER_ID."
             )
 
-        response = self._post_with_retries(
+        response = await self._post_with_retries(
             f"https://api.medium.com/v1/users/{user_id}/posts",
             headers={
                 "Authorization": f"Bearer {token}",
@@ -200,14 +210,14 @@ class MediumPublisher(BasePublisher):
 class WebhookPublisher(BasePublisher):
     platform = "webhook"
 
-    def publish(
+    async def publish(
         self, title: str, content: str, *, tags: list[str], published: bool
     ) -> PublishResult:
         webhook_url = os.getenv("BLOG_WEBHOOK_URL")
         if not webhook_url:
             raise PublisherError("Personal blog publishing requires BLOG_WEBHOOK_URL.")
 
-        response = self._post_with_retries(
+        response = await self._post_with_retries(
             webhook_url,
             headers={"Content-Type": "application/json"},
             payload={
@@ -251,7 +261,7 @@ def normalize_platforms(platforms: list[str] | None) -> list[str]:
     return normalized or ["devto"]
 
 
-def publish_to_platforms(
+async def publish_to_platforms(
     title: str,
     content: str,
     *,
@@ -270,7 +280,7 @@ def publish_to_platforms(
     for platform in selected_platforms:
         try:
             results.append(
-                PUBLISHERS[platform].publish(
+                await PUBLISHERS[platform].publish(
                     title,
                     content,
                     tags=clean_tags,
@@ -289,9 +299,9 @@ def publish_to_platforms(
     return [result.as_dict() for result in results]
 
 
-def post_to_platform(title: str, content: str) -> dict[str, Any]:
+async def post_to_platform(title: str, content: str) -> dict[str, Any]:
     """Backward-compatible Dev.to-only wrapper used by older integrations."""
-    results = publish_to_platforms(title, content, platforms=["devto"])
+    results = await publish_to_platforms(title, content, platforms=["devto"])
     first = results[0]
     if first["status"] != "success":
         raise Exception(first.get("message", "Dev.to publishing failed."))

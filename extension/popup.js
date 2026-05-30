@@ -23,12 +23,11 @@ function startProgress() {
     
     clearInterval(progressInterval);
     progressInterval = setInterval(() => {
-        progress += (100 / 15) * 0.1; // 0.1s tick
-        if (progress > 95) progress = 95; // cap at 95% until done
+        progress += (100 / 15) * 0.1;
+        if (progress > 95) progress = 95;
         
         bar.style.width = progress + '%';
         
-        // Update timer every second
         if (Math.floor(progress * 15 / 100) > Math.floor((progress - (100/15)*0.1) * 15 / 100)) {
             secondsLeft -= 1;
             if (secondsLeft < 1) secondsLeft = 1;
@@ -62,6 +61,36 @@ function convertMarkdownToHTML(markdown) {
         .replace(/\*(.*)\*/gim, '<i>$1</i>')
         .replace(/\n/gim, '<br>');
 }
+
+// ========== COPY TO CLIPBOARD FUNCTION ==========
+async function copyBlogToClipboard() {
+    if (!generatedBlogMarkdown) {
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "❌ No blog generated yet. Please generate a blog first.";
+        statusEl.className = "error-status";
+        return;
+    }
+    
+    try {
+        await navigator.clipboard.writeText(generatedBlogMarkdown);
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "✅ Blog copied to clipboard! You can paste it anywhere.";
+        statusEl.className = "success-status";
+    } catch (err) {
+        console.error("Copy failed:", err);
+        // Fallback for older browsers
+        const textarea = document.createElement("textarea");
+        textarea.value = generatedBlogMarkdown;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "✅ Blog copied to clipboard (fallback method).";
+        statusEl.className = "success-status";
+    }
+}
+// ================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
 
@@ -178,11 +207,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         const statusEl =
             document.getElementById('status');
 
-        generateBtn.disabled = true;
-        btnText.textContent = "Generating Blog...";
-        btnSpinner.style.display = "inline-block";
+const generateBtn = document.getElementById('generate-blog-btn');
+const copyBtn = document.getElementById('copyBtn');
 
-        startProgress();
+generateBtn.disabled = true;
+if (copyBtn) copyBtn.disabled = true;
+
+btnText.textContent = "Generating Blog...";
+btnSpinner.style.display = "inline-block";
+
+startProgress();
 
         try {
 
@@ -234,14 +268,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             } catch (msgErr) {
 
-                console.log(
-                    "Re-injecting content script..."
-                );
+console.log("Re-injecting content script...");
 
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    files: ['content.js']
-                });
+await chrome.scripting.executeScript({
+  target: { tabId: tab.id },
+  files: ['content.js']
+});
+
+finishProgress(false);
+
+if (generateBtn) generateBtn.disabled = false;
+if (copyBtn) copyBtn.disabled = false;
+
+return;
 
                 setTimeout(async () => {
 
@@ -278,8 +317,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             statusEl.innerText =
                 "Error: " + e.message;
 
-            statusEl.className =
-                "error-status";
+if (statusEl) {
+  statusEl.className = "error-status";
+}
+
+finishProgress(false);
+
+if (generateBtn) generateBtn.disabled = false;
+if (copyBtn) copyBtn.disabled = false;
 
             finishProgress(false);
             generateBtn.disabled = false;
@@ -288,11 +333,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    statusEl.innerText =
-        "Publishing automation active";
+if (statusEl) {
+  statusEl.innerText = "Publishing automation active";
+}
+
+} catch (e) {
+  console.error("Popup Error:", e);
+
+  if (statusEl) {
+    statusEl.innerText = "Error: " + e.message;
+    statusEl.className = "error-status";
+  }
+
+  finishProgress(false);
+
+  if (generateBtn) generateBtn.disabled = false;
+  if (copyBtn) copyBtn.disabled = false;
+}
 });
 
-// Listen for blog ready event
 chrome.runtime.onMessage.addListener((request) => {
 
     if (request.type === "BLOG_READY") {
@@ -337,12 +396,14 @@ chrome.runtime.onMessage.addListener((request) => {
                     document
                         .getElementById("generate-blog-btn")
                         .disabled = false;
-                    document
-                        .getElementById('btn-text')
-                        .textContent = "Generate Blog";
-                    document
-                        .getElementById('btn-spinner')
-                        .style.display = "none";
+const btnTextEl = document.getElementById('btn-text');
+const btnSpinnerEl = document.getElementById('btn-spinner');
+
+if (btnTextEl) btnTextEl.textContent = "Generate Blog";
+if (btnSpinnerEl) btnSpinnerEl.style.display = "none";
+
+const copyBtn = document.getElementById('copyBtn');
+if (copyBtn) copyBtn.disabled = false;
                 }
         });
     }
@@ -356,8 +417,9 @@ chrome.runtime.onMessage.addListener(
         document.getElementById('status');
 
     const btn =
-        document.getElementById('generate-blog-btn');
+document.getElementById('generate-blog-btn');
 
+const copyBtn = document.getElementById('copyBtn');
     if (request.type === 'STATUS_UPDATE') {
 
         statusEl.innerText =
@@ -376,6 +438,7 @@ chrome.runtime.onMessage.addListener(
                 "success-status";
 
             btn.disabled = false;
+            if (copyBtn) copyBtn.disabled = false;
 
         } else if (
             request.status === 'error'
@@ -386,6 +449,7 @@ chrome.runtime.onMessage.addListener(
                 "error-status";
 
             btn.disabled = false;
+            if (copyBtn) copyBtn.disabled = false;
 
         } else if (
             request.status === 'warning'
@@ -396,6 +460,7 @@ chrome.runtime.onMessage.addListener(
                 "warning-status";
 
             btn.disabled = false;
+            if (copyBtn) copyBtn.disabled = false;
         }
 
         document
@@ -506,3 +571,10 @@ document
         .getElementById("previewSection")
         .style.display = "none";
 });
+
+// ========== COPY BUTTON EVENT LISTENER ==========
+const copyBtn = document.getElementById('copyBtn');
+if (copyBtn) {
+    copyBtn.addEventListener('click', copyBlogToClipboard);
+}
+// =================================================

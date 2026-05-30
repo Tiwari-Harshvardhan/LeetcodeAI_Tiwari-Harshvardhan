@@ -6,6 +6,8 @@ import motor.motor_asyncio
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +15,9 @@ from pydantic import BaseModel
 from pymongo.errors import PyMongoError
 from twilio.rest import Client
 
-# --- UPDATED AI PATH ---
+logger = logging.getLogger(__name__)
+
+from ai import rate_code_efficiency
 from ai_core.blog_generator import generate_blog
 from devto import publish_to_platforms
 from models.reminder import PublishRecord
@@ -81,6 +85,12 @@ class Problem(BaseModel):
     tags: list[str] | None = None
 
 
+class EfficiencyRequest(BaseModel):
+    title: str
+    code: str
+    language: str = "python"
+
+
 class ReminderPreference(BaseModel):
     whatsapp_number: str
     reminder_time: str = "09:00"
@@ -143,12 +153,13 @@ async def create_blog(problem: Problem):
         return {"status": "error", "message": "Code is empty, cannot generate blog."}
 
     try:
-        blog_content = generate_blog(problem)
+        blog_content = await run_in_threadpool(generate_blog, problem)
+
     except Exception as e:
         return {"status": "error", "message": f"AI provider failure: {str(e)}"}
 
     try:
-        platform_results = publish_to_platforms(
+        platform_results = await publish_to_platforms(
             problem.title,
             blog_content,
             platforms=problem.platforms,
@@ -174,7 +185,6 @@ async def create_blog(problem: Problem):
             status=overall_status,
             author=problem.author,
         )
-
         await db.problem_info.update_one(
             {
                 "title": problem.title,
@@ -185,13 +195,11 @@ async def create_blog(problem: Problem):
             },
             upsert=True,
         )
-
     except Exception as e:
         print(f"Database logging failed: {e}")
 
     social_results = []
     if problem.share_to_social and successful:
-        # Find the first URL to share from successful platforms
         post_url = None
         for res in successful:
             if res.get("url"):
@@ -214,6 +222,51 @@ async def create_blog(problem: Problem):
             "social": social_results,
         },
     }
+
+
+# -----------------------------
+# Code Efficiency Rater Endpoint
+# -----------------------------
+@app.post("/rate-efficiency")
+def evaluate_code_efficiency(request: EfficiencyRequest):
+    """
+    Accepts a LeetCode solution and returns an AI-generated efficiency report.
+
+    Returns:
+    - Score (S / A / B / C / D)
+    - Time and Space complexity
+    - Approach classification (Brute Force / Suboptimal / Optimal)
+    - One-line summary of the approach
+    - A concrete improvement suggestion if applicable
+    """
+    if not request.code or request.code.strip() == "":
+        return {
+            "status": "error",
+            "message": "Code is empty, cannot rate efficiency."
+        }
+
+    if not request.title or request.title.strip() == "":
+        return {
+            "status": "error",
+            "message": "Problem title is required for efficiency analysis."
+        }
+
+    try:
+        efficiency_report = rate_code_efficiency(
+            title=request.title,
+            code=request.code,
+            language=request.language,
+        )
+        return {
+            "status": "success",
+            "data": efficiency_report
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Efficiency rating failed: {str(e)}"
+        }
 
 
 # -----------------------------
@@ -303,8 +356,6 @@ def reminder_health():
 @app.get("/test-whatsapp")
 def test_whatsapp():
     try:
-        import os
-
         from alerts.twilio_service import send_whatsapp_message
 
         phone = os.getenv("TEST_PHONE_NUMBER")
@@ -329,8 +380,6 @@ def test_whatsapp():
 @app.get("/test-call")
 def test_call():
     try:
-        import os
-
         from alerts.elevenlabs_service import generate_audio, generate_message
         from alerts.twilio_service import make_call
 
@@ -361,7 +410,6 @@ def test_call():
             }
         except Exception as el_err:
             print("ElevenLabs Error in Test Route:", el_err)
-            # Fallback to Twilio TTS
             phone = os.getenv("TEST_PHONE_NUMBER")
             if not phone:
                 return {
