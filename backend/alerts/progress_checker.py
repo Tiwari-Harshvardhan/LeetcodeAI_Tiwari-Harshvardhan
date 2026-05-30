@@ -25,14 +25,10 @@ async def _check_unsolved_users_async():
             continue
 
         # Check if there is a blog post created today
-        # Date is stored as ISO format string, we can do a regex or range query
-        # Since it's stored as '2026-05-23T...', we can do a prefix match
         today_str = today.isoformat()
-
         solved_today_count = await db.problem_info.count_documents({
             "date": {"$regex": f"^{today_str}"}
         })
-
         has_solved = solved_today_count > 0
 
         # Also check Leetcode submissions
@@ -71,7 +67,7 @@ async def _check_unsolved_users_async():
 
         if not has_solved:
             # Not solved today, send reminder!
-            name = "Vansh" # Fallback or could add name to DB
+            name = "Vansh"
             message = generate_message(name)
 
             print("Triggering alert for:", name)
@@ -91,7 +87,6 @@ async def _check_unsolved_users_async():
                 try:
                     audio_file = generate_audio(message)
 
-                    # 2. Construct public URL to the static file
                     backend_url = os.getenv("BACKEND_URL", "https://leetcodeai-backend.onrender.com")
                     if backend_url.endswith("/"):
                         backend_url = backend_url[:-1]
@@ -104,7 +99,6 @@ async def _check_unsolved_users_async():
                 except Exception as el_err:
                     print("ElevenLabs failed (possibly Free Tier VPN block):", el_err)
                     print("Falling back to standard Twilio Robot Voice...")
-                    # Fallback to standard Twilio voice
                     call_sid = make_call(phone, text_to_say=message)
                     print(f"Call placed successfully with Twilio TTS to {phone}, SID: {call_sid}")
 
