@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from pymongo.errors import PyMongoError
 from twilio.rest import Client
 
-logger = logging.getLogger(__name__)
+load_dotenv()
 
 from ai import rate_code_efficiency
 from ai_core.blog_generator import generate_blog
@@ -23,7 +23,7 @@ from models.reminder import PublishRecord
 from services.reminder_scheduler import start_scheduler
 from social import share_to_platforms
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LeetLog AI", version="1.0.0")
 
