@@ -83,7 +83,7 @@ class TestHashnodePublisher:
     # Credentials guard                                                    #
     # ------------------------------------------------------------------ #
 
-    def test_missing_credentials_raises_before_http(self, mock_hashnode_request, monkeypatch):
+    async def test_missing_credentials_raises_before_http(self, mock_hashnode_request, monkeypatch):
         """PublisherError is raised when env vars are absent; no HTTP call is made."""
         from devto import HashnodePublisher, PublisherError
 
@@ -91,7 +91,7 @@ class TestHashnodePublisher:
         monkeypatch.delenv("HASHNODE_PUBLICATION_ID", raising=False)
 
         with pytest.raises(PublisherError, match="HASHNODE_TOKEN"):
-            HashnodePublisher().publish(
+            await HashnodePublisher().publish(
                 "Two Sum", "# content", tags=["leetcode"], published=True
             )
 
@@ -101,14 +101,14 @@ class TestHashnodePublisher:
     # Happy path                                                           #
     # ------------------------------------------------------------------ #
 
-    def test_successful_publish_returns_url(self, mock_hashnode_request, monkeypatch):
+    async def test_successful_publish_returns_url(self, mock_hashnode_request, monkeypatch):
         """Valid GraphQL success response produces PublishResult with status='success'."""
         from devto import HashnodePublisher
 
         monkeypatch.setenv("HASHNODE_TOKEN", "tok-valid")
         monkeypatch.setenv("HASHNODE_PUBLICATION_ID", "pub-abc123")
 
-        result = HashnodePublisher().publish(
+        result = await HashnodePublisher().publish(
             "Two Sum", "# content", tags=["leetcode"], published=True
         )
 
@@ -120,7 +120,7 @@ class TestHashnodePublisher:
     # GraphQL error cases (core regression for issue #50)                 #
     # ------------------------------------------------------------------ #
 
-    def test_graphql_error_raises_publisher_error(self, mock_hashnode_request, monkeypatch):
+    async def test_graphql_error_raises_publisher_error(self, mock_hashnode_request, monkeypatch):
         """
         HTTP 200 + GraphQL 'errors' field must raise PublisherError, not return success.
         This is the primary regression test for issue #50.
@@ -136,11 +136,11 @@ class TestHashnodePublisher:
         }
 
         with pytest.raises(PublisherError):
-            HashnodePublisher().publish(
+            await HashnodePublisher().publish(
                 "Two Sum", "# content", tags=["leetcode"], published=True
             )
 
-    def test_graphql_error_message_is_propagated(self, mock_hashnode_request, monkeypatch):
+    async def test_graphql_error_message_is_propagated(self, mock_hashnode_request, monkeypatch):
         """The human-readable GraphQL error message is included in the exception."""
         from devto import HashnodePublisher, PublisherError
 
@@ -153,11 +153,11 @@ class TestHashnodePublisher:
         }
 
         with pytest.raises(PublisherError, match="Invalid publication ID"):
-            HashnodePublisher().publish(
+            await HashnodePublisher().publish(
                 "Two Sum", "# content", tags=["leetcode"], published=True
             )
 
-    def test_graphql_multiple_errors_uses_first(self, mock_hashnode_request, monkeypatch):
+    async def test_graphql_multiple_errors_uses_first(self, mock_hashnode_request, monkeypatch):
         """When multiple GraphQL errors are returned, the first message is used."""
         from devto import HashnodePublisher, PublisherError
 
@@ -173,11 +173,11 @@ class TestHashnodePublisher:
         }
 
         with pytest.raises(PublisherError, match="First error"):
-            HashnodePublisher().publish(
+            await HashnodePublisher().publish(
                 "Two Sum", "# content", tags=["leetcode"], published=True
             )
 
-    def test_graphql_error_without_message_uses_fallback(self, mock_hashnode_request, monkeypatch):
+    async def test_graphql_error_without_message_uses_fallback(self, mock_hashnode_request, monkeypatch):
         """If a GraphQL error object has no 'message' key, a safe fallback is used."""
         from devto import HashnodePublisher, PublisherError
 
@@ -190,11 +190,11 @@ class TestHashnodePublisher:
         }
 
         with pytest.raises(PublisherError, match="Unknown Hashnode GraphQL error"):
-            HashnodePublisher().publish(
+            await HashnodePublisher().publish(
                 "Two Sum", "# content", tags=["leetcode"], published=True
             )
 
-    def test_empty_errors_list_does_not_raise(self, mock_hashnode_request, monkeypatch):
+    async def test_empty_errors_list_does_not_raise(self, mock_hashnode_request, monkeypatch):
         """An empty 'errors' list is falsy and must not be treated as a failure."""
         from devto import HashnodePublisher
 
@@ -214,7 +214,7 @@ class TestHashnodePublisher:
             },
         }
 
-        result = HashnodePublisher().publish(
+        result = await HashnodePublisher().publish(
             "Two Sum", "# content", tags=["leetcode"], published=True
         )
         assert result.status == "success"
