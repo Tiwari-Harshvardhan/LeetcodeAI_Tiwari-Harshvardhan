@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import motor.motor_asyncio
@@ -19,7 +20,19 @@ from social import share_to_platforms
 
 load_dotenv()
 
-app = FastAPI(title="LeetLog AI", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Start background schedulers when server starts.
+    """
+    try:
+        start_scheduler()
+        print("Reminder scheduler started successfully.")
+    except Exception as e:
+        print(f"Reminder scheduler failed to start: {e}")
+    yield
+
+app = FastAPI(title="LeetLog AI", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,19 +82,7 @@ class ReminderPreference(BaseModel):
     is_opted_in: bool = True
 
 
-# -----------------------------
-# Startup Event
-# -----------------------------
-@app.on_event("startup")
-async def startup_event():
-    """
-    Start background schedulers when server starts.
-    """
-    try:
-        start_scheduler()
-        print("Reminder scheduler started successfully.")
-    except Exception as e:
-        print(f"Reminder scheduler failed to start: {e}")
+
 
 
 # -----------------------------
