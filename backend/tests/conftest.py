@@ -27,9 +27,17 @@ class FakePreferencesCollection:
         self.update_one = AsyncMock()
 
 
+class FakeProblemInfoCollection:
+    def __init__(self) -> None:
+        self.find_one = AsyncMock(return_value=None)
+        self.update_one = AsyncMock()
+        self.count_documents = AsyncMock(return_value=0)
+
+
 class FakeDatabase:
     def __init__(self) -> None:
         self.preferences = FakePreferencesCollection()
+        self.problem_info = FakeProblemInfoCollection()
 
 
 class FakeMotorClient:
@@ -146,10 +154,42 @@ def mock_gemini_client(mocker):
 
 @pytest.fixture
 def mock_devto_request(mocker):
-    devto_module = importlib.import_module("devto")
-    response = Mock(name="devto_response")
+    import httpx
+
+    response = mocker.Mock(spec=httpx.Response)
     response.status_code = 201
     response.json.return_value = {"id": 123, "url": "https://dev.to/mock-post"}
+    response.text = "mock text"
+
+    mock_post = mocker.AsyncMock(return_value=response)
+    mocker.patch("httpx.AsyncClient.post", new=mock_post)
+
+    return {"request": mock_post, "response": response}
+
+
+@pytest.fixture
+def mock_hashnode_request(mocker):
+    """
+    Mocks requests.post for HashnodePublisher tests.
+
+    Default return value is a successful GraphQL response.
+    Individual tests can override ``response.json.return_value`` to simulate
+    GraphQL error payloads without making real network calls or needing API keys.
+    """
+    devto_module = importlib.import_module("devto")
+    response = Mock(name="hashnode_response")
+    response.status_code = 200
+    response.json.return_value = {
+        "data": {
+            "publishPost": {
+                "post": {
+                    "id": "hn-post-123",
+                    "url": "https://username.hashnode.dev/leetcode-solution-two-sum",
+                    "title": "LeetCode Solution: Two Sum",
+                }
+            }
+        }
+    }
     request_mock = mocker.patch.object(
         devto_module.requests,
         "post",

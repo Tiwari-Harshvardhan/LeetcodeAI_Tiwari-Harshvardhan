@@ -13,6 +13,7 @@ Author Account: {problem.author}
 Publishing Time: {current_time}
 Title: {problem.title}
 
+Difficulty: {getattr(problem, 'difficulty', 'Unknown')}
 Problem Description:
 {problem.description}
 
@@ -20,7 +21,7 @@ Solution Code:
 {problem.code}
 
 Strictly follow this structure:
-1. Title
+1. Title(include a difficulty badge: 🟢 Easy/ 🟡 Medium/ 🔴 Hard based on the difficulty feild)
 2. Problem Explanation
 3. Intuition
 4. Approach

@@ -4,17 +4,20 @@ let generatedBlog = "";
 
 let progressInterval;
 let generationTimeout;
-function resetGenerationUI() {
-    const btn =
-        document.getElementById("generateBtn");
 
-    const progressContainer =
-        document.getElementById("progressContainer");
+function resetGenerationUI() {
+    const btn = document.getElementById("generateBtn");
+    const progressContainer = document.getElementById("progressContainer");
+    const copyBtn = document.getElementById('copyBtn');
 
     clearInterval(progressInterval);
 
     if (btn) {
         btn.disabled = false;
+    }
+
+    if (copyBtn) {
+        copyBtn.disabled = false;
     }
 
     if (progressContainer) {
@@ -45,17 +48,15 @@ function startProgress() {
     generationTimeout = setTimeout(() => {
         finishProgress(false);
 
-        const statusEl =
-            document.getElementById("status");
+        const statusEl = document.getElementById("status");
 
         if (statusEl) {
-            statusEl.innerText =
-                "Generation timed out. Please try again.";
-
-            statusEl.className =
-                "error-status";
+            statusEl.innerText = "Generation timed out. Please try again.";
+            statusEl.className = "error-status";
         }
     }, 30000);
+
+    // RESOLVED: kept fix/popup-status-reset comments for clarity; logic is identical
     progressInterval = setInterval(() => {
         progress += (100 / 15) * 0.1; // 0.1s tick
         if (progress > 95) progress = 95; // cap at 95% until done
@@ -103,18 +104,41 @@ function convertMarkdownToHTML(markdown) {
         .replace(/\n/gim, '<br>');
 }
 
+// ========== COPY TO CLIPBOARD FUNCTION ==========
+async function copyBlogToClipboard() {
+    if (!generatedBlogMarkdown) {
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "❌ No blog generated yet. Please generate a blog first.";
+        statusEl.className = "error-status";
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(generatedBlogMarkdown);
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "✅ Blog copied to clipboard! You can paste it anywhere.";
+        statusEl.className = "success-status";
+    } catch (err) {
+        console.error("Copy failed:", err);
+        // Fallback for older browsers
+        const textarea = document.createElement("textarea");
+        textarea.value = generatedBlogMarkdown;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "✅ Blog copied to clipboard (fallback method).";
+        statusEl.className = "success-status";
+    }
+}
+// ================================================
+
 document.addEventListener('DOMContentLoaded', async () => {
 
     const statusEl = document.getElementById('status');
-    const platformInputs =
-        Array.from(
-            document.querySelectorAll(
-                'input[name="platform"]'
-            )
-        );
-
-    const draftInput =
-        document.getElementById('draftMode');
+    const platformInputs = Array.from(document.querySelectorAll('input[name="platform"]'));
+    const draftInput = document.getElementById('draftMode');
 
     chrome.storage.local.get({
         publishingPlatforms: ['devto'],
@@ -122,29 +146,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, ({ publishingPlatforms, publishAsDraft }) => {
 
         platformInputs.forEach(input => {
-            input.checked =
-                publishingPlatforms.includes(
-                    input.value
-                );
+            input.checked = publishingPlatforms.includes(input.value);
         });
 
-        draftInput.checked =
-            publishAsDraft;
+        draftInput.checked = publishAsDraft;
     });
 
     const savePublishingSettings = () => {
 
-        const selectedPlatforms =
-            platformInputs
-                .filter(input => input.checked)
-                .map(input => input.value);
+        const selectedPlatforms = platformInputs
+            .filter(input => input.checked)
+            .map(input => input.value);
 
         if (selectedPlatforms.length === 0) {
 
-            const devtoInput =
-                platformInputs.find(
-                    input => input.value === 'devto'
-                );
+            const devtoInput = platformInputs.find(input => input.value === 'devto');
 
             if (devtoInput) {
                 devtoInput.checked = true;
@@ -153,173 +169,125 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         chrome.storage.local.set({
-            publishingPlatforms:
-                selectedPlatforms,
-            publishAsDraft:
-                draftInput.checked
+            publishingPlatforms: selectedPlatforms,
+            publishAsDraft: draftInput.checked
         });
     };
 
-    platformInputs.forEach(input =>
-        input.addEventListener(
-            'change',
-            savePublishingSettings
-        )
-    );
-
-    draftInput.addEventListener(
-        'change',
-        savePublishingSettings
-    );
+    platformInputs.forEach(input => input.addEventListener('change', savePublishingSettings));
+    draftInput.addEventListener('change', savePublishingSettings);
 
     // Load generated blog from storage
     chrome.storage.local.get(
-        [
-            "generatedBlog",
-            "generatedProblemTitle"
-        ],
+        ["generatedBlog", "generatedProblemTitle"],
         (res) => {
 
             if (res.generatedBlog) {
 
-                generatedBlog =
-                    res.generatedBlog;
+                generatedBlog = res.generatedBlog;
+                generatedBlogMarkdown = res.generatedBlog;
+                generatedProblemTitle = res.generatedProblemTitle || "leetcode-blog";
 
-                generatedBlogMarkdown =
-                    res.generatedBlog;
-
-                generatedProblemTitle =
-                    res.generatedProblemTitle
-                    || "leetcode-blog";
-
-                document
-                    .getElementById("exportSection")
-                    .style.display = "block";
-
-                document
-                    .getElementById("previewSection")
-                    .style.display = "block";
-
-                document
-                    .getElementById("blogEditor")
-                    .value = generatedBlog;
-            }
-            else {
+                document.getElementById("exportSection").style.display = "block";
+                document.getElementById("previewSection").style.display = "block";
+                document.getElementById("blogEditor").value = generatedBlog;
+            } else {
                 statusEl.innerText = "Ready to generate blog";
                 statusEl.className = "";
             }
-        });
-
+        }
+    );
 });
 
 // Generate button
-document.getElementById('generateBtn')
-    .addEventListener('click', async () => {
+document.getElementById('generateBtn').addEventListener('click', async () => {
 
-        const statusEl =
-            document.getElementById('status');
+    const statusEl = document.getElementById('status');
 
-        const btn =
-            document.getElementById('generateBtn');
+    // RESOLVED: combined both branches — startProgress() from fix branch, copyBtn from main
+    const btn = document.getElementById('generateBtn');
+    const copyBtn = document.getElementById('copyBtn');
 
-        btn.disabled = true;
+    btn.disabled = true;
+    if (copyBtn) copyBtn.disabled = true;
 
-        startProgress();
+    startProgress();
+
+    try {
+
+        const tabs = await chrome.tabs.query({
+            active: true,
+            currentWindow: true
+        });
+
+        const tab = tabs[0];
+
+        const customPrompt = document
+            .getElementById('customPrompt')
+            .value
+            .trim();
+
+        if (!tab || !tab.url || !tab.url.includes("leetcode.com/problems/")) {
+
+            statusEl.innerText = "Please open a LeetCode problem page!";
+            statusEl.className = "error-status";
+
+            // RESOLVED: finishProgress from fix branch + copyBtn re-enable from main
+            finishProgress(false);
+            btn.disabled = false;
+            if (copyBtn) copyBtn.disabled = false;
+            return;
+        }
 
         try {
 
-            const tabs =
-                await chrome.tabs.query({
-                    active: true,
-                    currentWindow: true
-                });
+            await chrome.tabs.sendMessage(tab.id, {
+                type: 'MANUAL_TRIGGER',
+                custom_prompt: customPrompt
+            });
 
-            const tab = tabs[0];
+        } catch (msgErr) {
 
-            const customPrompt =
-                document
-                    .getElementById('customPrompt')
-                    .value
-                    .trim();
+            console.log("Re-injecting content script...");
 
-            if (
-                !tab ||
-                !tab.url ||
-                !tab.url.includes(
-                    "leetcode.com/problems/"
-                )
-            ) {
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['content.js']
+            });
 
-                statusEl.innerText =
-                    "Please open a LeetCode problem page!";
+            setTimeout(async () => {
 
-                statusEl.className =
-                    "error-status";
+                try {
 
-                finishProgress(false);
+                    await chrome.tabs.sendMessage(tab.id, { type: 'MANUAL_TRIGGER' });
 
-                return;
-            }
+                } catch (e2) {
 
-            try {
+                    statusEl.innerText = "Error: Please refresh LeetCode page!";
+                    statusEl.className = "error-status";
 
-                await chrome.tabs.sendMessage(
-                    tab.id,
-                    {
-                        type: 'MANUAL_TRIGGER',
-                        custom_prompt: customPrompt
-                    }
-                );
+                    // RESOLVED: finishProgress from fix branch + copyBtn re-enable from main
+                    finishProgress(false);
+                    btn.disabled = false;
+                    if (copyBtn) copyBtn.disabled = false;
+                }
 
-            } catch (msgErr) {
-
-                console.log(
-                    "Re-injecting content script..."
-                );
-
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    files: ['content.js']
-                });
-
-                setTimeout(async () => {
-
-                    try {
-
-                        await chrome.tabs.sendMessage(
-                            tab.id,
-                            {
-                                type: 'MANUAL_TRIGGER'
-                            }
-                        );
-
-                    } catch (e2) {
-
-                        statusEl.innerText =
-                            "Error: Please refresh LeetCode page!";
-
-                        statusEl.className =
-                            "error-status";
-
-                        finishProgress(false);
-                    }
-
-                }, 500);
-            }
-
-        } catch (e) {
-
-            console.error("Popup Error:", e);
-
-            statusEl.innerText =
-                "Error: " + e.message;
-
-            statusEl.className =
-                "error-status";
-
-            finishProgress(false);
+            }, 500);
         }
-    });
+
+    } catch (e) {
+
+        console.error("Popup Error:", e);
+
+        statusEl.innerText = "Error: " + e.message;
+        statusEl.className = "error-status";
+
+        // RESOLVED: finishProgress from fix branch + copyBtn re-enable from main
+        finishProgress(false);
+        btn.disabled = false;
+        if (copyBtn) copyBtn.disabled = false;
+    }
+});
 
 // Listen for blog ready event
 chrome.runtime.onMessage.addListener((request) => {
@@ -327,226 +295,140 @@ chrome.runtime.onMessage.addListener((request) => {
     if (request.type === "BLOG_READY") {
 
         chrome.storage.local.get(
-            [
-                "generatedBlog",
-                "generatedProblemTitle"
-            ],
+            ["generatedBlog", "generatedProblemTitle"],
             (res) => {
 
                 if (res.generatedBlog) {
 
-                    generatedBlog =
-                        res.generatedBlog;
+                    generatedBlog = res.generatedBlog;
+                    generatedBlogMarkdown = res.generatedBlog;
+                    generatedProblemTitle = res.generatedProblemTitle || "leetcode-blog";
 
-                    generatedBlogMarkdown =
-                        res.generatedBlog;
+                    document.getElementById("exportSection").style.display = "block";
+                    document.getElementById("previewSection").style.display = "block";
+                    document.getElementById("blogEditor").value = generatedBlog;
 
-                    generatedProblemTitle =
-                        res.generatedProblemTitle
-                        || "leetcode-blog";
-
-                    document
-                        .getElementById("exportSection")
-                        .style.display = "block";
-
-                    document
-                        .getElementById("previewSection")
-                        .style.display = "block";
-
-                    document
-                        .getElementById("blogEditor")
-                        .value = generatedBlog;
-
-                    document
-                        .getElementById("status")
-                        .innerText =
-                        "Blog generated successfully!";
+                    document.getElementById("status").innerText = "Blog generated successfully!";
 
                     finishProgress(true);
+
+                    // RESOLVED: kept copyBtn re-enable from main; btn handled by resetGenerationUI
+                    const copyBtn = document.getElementById('copyBtn');
+                    if (copyBtn) copyBtn.disabled = false;
                 }
-            });
+            }
+        );
     }
 });
 
 // Status updates
-chrome.runtime.onMessage.addListener(
-    (request) => {
+chrome.runtime.onMessage.addListener((request) => {
 
-        const statusEl =
-            document.getElementById('status');
+    // RESOLVED: used main's declarations (all three vars); removed duplicate const btn below
+    const statusEl = document.getElementById('status');
+    const btn = document.getElementById('generateBtn');
+    const copyBtn = document.getElementById('copyBtn');
 
-        const btn =
-            document.getElementById('generateBtn');
+    if (request.type === 'STATUS_UPDATE') {
 
-        if (request.type === 'STATUS_UPDATE') {
+        statusEl.innerText = request.message;
+        statusEl.className = "";
 
-            statusEl.innerText =
-                request.message;
+        // RESOLVED: kept finishProgress() calls from fix branch; added copyBtn from main
+        if (request.status === 'success') {
+            finishProgress(true);
+            if (copyBtn) copyBtn.disabled = false;
 
-            statusEl.className = "";
+            statusEl.innerText = request.message || "Successfully posted";
+            statusEl.className = "success-status";
 
-            if (request.status === 'success') {
-                finishProgress(true);
+        } else if (request.status === 'error') {
+            finishProgress(false);
+            if (copyBtn) copyBtn.disabled = false;
 
-                statusEl.innerText =
-                    request.message ||
-                    "Successfully posted";
+            statusEl.className = "error-status";
 
-                statusEl.className =
-                    "success-status";
+        } else if (request.status === 'warning') {
+            finishProgress(true);
+            if (copyBtn) copyBtn.disabled = false;
 
-            } else if (
-                request.status === 'error'
-            ) {
-                finishProgress(false);
-
-                statusEl.className =
-                    "error-status";
-
-            } else if (
-                request.status === 'warning'
-            ) {
-                finishProgress(true);
-
-                statusEl.className =
-                    "warning-status";
-            }
+            statusEl.className = "warning-status";
         }
-    });
+    }
+});
 
 // Dashboard button
-document.getElementById('dashboardBtn')
-    .addEventListener('click', () => {
-
-        chrome.tabs.create({
-            url: chrome.runtime.getURL(
-                'dashboard.html'
-            )
-        });
+document.getElementById('dashboardBtn').addEventListener('click', () => {
+    chrome.tabs.create({
+        url: chrome.runtime.getURL('dashboard.html')
     });
+});
 
 // Export Markdown
-document
-    .getElementById("exportMarkdownBtn")
-    ?.addEventListener("click", () => {
+document.getElementById("exportMarkdownBtn")?.addEventListener("click", () => {
 
-        const blob = new Blob(
-            [generatedBlogMarkdown],
-            { type: "text/markdown" }
-        );
-
-        const url =
-            URL.createObjectURL(blob);
-
-        const a =
-            document.createElement("a");
-
-        a.href = url;
-
-        a.download =
-            `${generatedProblemTitle}.md`;
-
-        a.click();
-
-        URL.revokeObjectURL(url);
-    });
+    const blob = new Blob([generatedBlogMarkdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${generatedProblemTitle}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+});
 
 // Export HTML
-document
-    .getElementById("exportHTMLBtn")
-    ?.addEventListener("click", () => {
+document.getElementById("exportHTMLBtn")?.addEventListener("click", () => {
 
-        const html =
-            convertMarkdownToHTML(
-                generatedBlogMarkdown
-            );
-
-        const blob = new Blob(
-            [html],
-            { type: "text/html" }
-        );
-
-        const url =
-            URL.createObjectURL(blob);
-
-        const a =
-            document.createElement("a");
-
-        a.href = url;
-
-        a.download =
-            `${generatedProblemTitle}.html`;
-
-        a.click();
-
-        URL.revokeObjectURL(url);
-    });
+    const html = convertMarkdownToHTML(generatedBlogMarkdown);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${generatedProblemTitle}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+});
 
 // Export PDF
-document
-    .getElementById("exportPDFBtn")
-    ?.addEventListener("click", () => {
+document.getElementById("exportPDFBtn")?.addEventListener("click", () => {
 
-        const container =
-            document.createElement("div");
+    const container = document.createElement("div");
+    container.style.padding = "20px";
+    container.innerHTML = convertMarkdownToHTML(generatedBlogMarkdown);
 
-        container.style.padding =
-            "20px";
-
-        container.innerHTML =
-            convertMarkdownToHTML(
-                generatedBlogMarkdown
-            );
-
-        html2pdf()
-            .set({
-                margin: 0.5,
-                filename:
-                    `${generatedProblemTitle}.pdf`,
-                image: {
-                    type: "jpeg",
-                    quality: 1
-                },
-                html2canvas: {
-                    scale: 2
-                },
-                jsPDF: {
-                    unit: "in",
-                    format: "a4",
-                    orientation: "portrait"
-                }
-            })
-            .from(container)
-            .save();
-    });
+    html2pdf()
+        .set({
+            margin: 0.5,
+            filename: `${generatedProblemTitle}.pdf`,
+            image: { type: "jpeg", quality: 1 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: "in", format: "a4", orientation: "portrait" }
+        })
+        .from(container)
+        .save();
+});
 
 // Publish button
-document
-    .getElementById("publishBtn")
-    ?.addEventListener("click", async () => {
+document.getElementById("publishBtn")?.addEventListener("click", async () => {
 
-        const editedBlog =
-            document
-                .getElementById("blogEditor")
-                .value;
+    const editedBlog = document.getElementById("blogEditor").value;
 
-        chrome.runtime.sendMessage({
-            type: "PUBLISH_EDITED_BLOG",
-            blog: editedBlog
-        });
-
-        document
-            .getElementById("status")
-            .innerText =
-            "Publishing edited blog...";
+    chrome.runtime.sendMessage({
+        type: "PUBLISH_EDITED_BLOG",
+        blog: editedBlog
     });
+
+    document.getElementById("status").innerText = "Publishing edited blog...";
+});
 
 // Cancel button
-document
-    .getElementById("cancelPreviewBtn")
-    ?.addEventListener("click", () => {
+document.getElementById("cancelPreviewBtn")?.addEventListener("click", () => {
+    document.getElementById("previewSection").style.display = "none";
+});
 
-        document
-            .getElementById("previewSection")
-            .style.display = "none";
-    });
+// ========== COPY BUTTON EVENT LISTENER ==========
+const copyBtn = document.getElementById('copyBtn');
+if (copyBtn) {
+    copyBtn.addEventListener('click', copyBlogToClipboard);
+}
+// =================================================
