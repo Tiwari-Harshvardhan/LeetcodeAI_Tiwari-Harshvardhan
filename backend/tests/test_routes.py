@@ -141,6 +141,7 @@ class TestReminderRoutes:
     def test_subscribe_valid_payload(self, client, mock_db):
         """Valid subscription payload is accepted."""
         payload = {
+            "name": "Test User",
             "whatsapp_number": "+911234567890",
             "reminder_time": "09:00",
             "timezone": "Asia/Kolkata",

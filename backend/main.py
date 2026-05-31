@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import motor.motor_asyncio
@@ -25,7 +26,19 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-app = FastAPI(title="LeetLog AI", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Start background schedulers when server starts.
+    """
+    try:
+        start_scheduler()
+        print("Reminder scheduler started successfully.")
+    except Exception as e:
+        print(f"Reminder scheduler failed to start: {e}")
+    yield
+
+app = FastAPI(title="LeetLog AI", version="1.0.0", lifespan=lifespan)
 
 @app.exception_handler(PyMongoError)
 async def mongodb_exception_handler(request, exc: PyMongoError):
@@ -95,19 +108,7 @@ class ReminderPreference(BaseModel):
     is_opted_in: bool = True
 
 
-# -----------------------------
-# Startup Event
-# -----------------------------
-@app.on_event("startup")
-async def startup_event():
-    """
-    Start background schedulers when server starts.
-    """
-    try:
-        start_scheduler()
-        print("Reminder scheduler started successfully.")
-    except Exception as e:
-        print(f"Reminder scheduler failed to start: {e}")
+
 
 
 # -----------------------------
