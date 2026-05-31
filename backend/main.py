@@ -134,7 +134,7 @@ async def create_blog(problem: Problem):
             }
 
     try:
-        platform_results = publish_to_platforms(
+        platform_results = await publish_to_platforms(
             problem.title,
             blog_content,
             platforms=problem.platforms,
