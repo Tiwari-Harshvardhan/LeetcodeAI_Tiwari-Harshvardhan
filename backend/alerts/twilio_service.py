@@ -1,3 +1,4 @@
+import logging
 import os
 
 from twilio.rest import Client
@@ -8,7 +9,7 @@ twilio_number = os.getenv("TWILIO_PHONE_NUMBER")
 
 client = Client(account_sid, auth_token)
 
-import logging
+
 
 # Setup a clean logger for exception visibility
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ def make_call(to_number: str, audio_url: str = None, text_to_say: str = None):
         # And completely map the string to Devanagari for perfect Hindi pronunciation
         if not text_to_say:
             text_to_say = ""
-            
+
         if "6 Lakh" in text_to_say:
             spoken_text = '<prosody rate="85%">छह लाख की मेहनत करके, <break time="400ms"/> पैंतीस लाख के सपने <emphasis level="strong">नहीं</emphasis> देखे जाते! <break time="500ms"/> <prosody volume="x-loud" pitch="low">DSA सॉल्व कर चल!</prosody></prosody>'
         else:
