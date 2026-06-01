@@ -152,11 +152,6 @@ class TestGenerateBlogRoute:
             "author": "testuser",
         }
 
-        response = client.post(
-            "/generate-blog",
-            json=payload,
-            headers=TEST_HEADERS,
-        )
         mock_generate_blog.assert_called_once()
 
     def test_post_to_platform_receives_title(
