@@ -92,6 +92,7 @@ class AuthCredentials(BaseModel):
     name: str | None = None
     email: str
     password: str
+    timezone: str = "Asia/Kolkata"
 
 
 class LoginCredentials(BaseModel):
@@ -103,6 +104,7 @@ class UserPublic(BaseModel):
     id: str
     name: str
     email: str
+    timezone: str = "Asia/Kolkata"
 
 
 class AuthResponse(BaseModel):
@@ -190,6 +192,7 @@ def _public_user(user: dict[str, Any]) -> UserPublic:
         id=user["id"],
         name=user.get("name") or user["email"].split("@")[0],
         email=user["email"],
+        timezone=user.get("timezone", "Asia/Kolkata"),
     )
 
 
@@ -264,6 +267,7 @@ async def register(credentials: AuthCredentials):
         "id": secrets.token_urlsafe(16),
         "name": (credentials.name or email.split("@")[0]).strip(),
         "email": email,
+        "timezone": credentials.timezone,
         "password_salt": salt,
         "password_hash": password_hash,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -317,6 +321,10 @@ async def update_integration_settings(
         {"user_id": current_user["id"]},
         {"$set": {"user_id": current_user["id"], **settings_doc}},
         upsert=True,
+    )
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"timezone": settings.timezone}},
     )
 
     if settings.whatsapp_number:

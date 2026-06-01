@@ -35,6 +35,11 @@ class FakeCursor:
     def limit(self, *args, **kwargs):
         return self
 
+    async def to_list(self, length=None):
+        if length is None:
+            return [dict(record) for record in self.records]
+        return [dict(record) for record in self.records[:length]]
+
     def __aiter__(self):
         self._iter = iter(self.records)
         return self
@@ -56,7 +61,7 @@ class FakeCollection:
 
     async def _find_one(self, query, *args, **kwargs):
         for record in self.records:
-            if all(record.get(key) == value for key, value in query.items()):
+            if self._matches(record, query):
                 return dict(record)
         return None
 
@@ -67,7 +72,7 @@ class FakeCollection:
     async def _update_one(self, query, update, upsert=False, *args, **kwargs):
         payload = update.get("$set", update)
         for record in self.records:
-            if all(record.get(key) == value for key, value in query.items()):
+            if self._matches(record, query):
                 record.update(payload)
                 return Mock(matched_count=1, modified_count=1)
         if upsert:
@@ -75,10 +80,29 @@ class FakeCollection:
         return Mock(matched_count=0, modified_count=0)
 
     def find(self, *args, **kwargs):
-        return FakeCursor(self.records)
+        query = args[0] if args else {}
+        return FakeCursor([record for record in self.records if self._matches(record, query)])
 
     def aggregate(self, *args, **kwargs):
         return FakeCursor([])
+
+    @staticmethod
+    def _matches(record, query):
+        for key, value in query.items():
+            record_value = record.get(key)
+            if isinstance(value, dict):
+                if "$in" in value and record_value not in value["$in"]:
+                    return False
+                if "$exists" in value and (key in record) is not value["$exists"]:
+                    return False
+                if "$gte" in value and record_value < value["$gte"]:
+                    return False
+                if "$lte" in value and record_value > value["$lte"]:
+                    return False
+                continue
+            if record_value != value:
+                return False
+        return True
 
 
 class FakeDatabase:
@@ -87,6 +111,8 @@ class FakeDatabase:
         self.problem_info = FakeCollection()
         self.users = FakeCollection()
         self.integration_settings = FakeCollection()
+        self.reminder_jobs = FakeCollection()
+        self.reminder_alerts = FakeCollection()
 
 
 class FakeMotorClient:
