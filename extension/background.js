@@ -1,7 +1,7 @@
 const API_BASE_URL = "https://leetcodeai-backend.onrender.com";
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'GENERATE_BLOG') {
-        const { title, description, code, author, client_time, custom_prompt } = request.payload;
+        const { title, description, code, author, client_time, custom_prompt, difficulty } = request.payload;
         chrome.storage.local.get({
             publishingPlatforms: ['devto'],
             publishAsDraft: false
@@ -10,7 +10,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    title, description, code, author, client_time, custom_prompt,
+                    title, description, code, author, client_time, custom_prompt, difficulty,
                     platforms: publishingPlatforms,
                     publish_as_draft: publishAsDraft
                 })
