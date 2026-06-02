@@ -123,6 +123,21 @@ class TestGenerateBlogRoute:
         client.post("/generate-blog", json=payload)
         mock_generate_blog.assert_called_once()
 
+    def test_generate_blog_receives_difficulty(
+        self, client, mock_generate_blog, mock_post_to_platform
+    ):
+        """Verify submitted difficulty is preserved on the Problem model."""
+        payload = {
+            "title": "Two Sum",
+            "description": "Given an array...",
+            "code": "def twoSum(): pass",
+            "author": "testuser",
+            "difficulty": "Easy",
+        }
+        client.post("/generate-blog", json=payload)
+        problem = mock_generate_blog.call_args.args[0]
+        assert problem.difficulty == "Easy"
+
     def test_post_to_platform_receives_title(
         self, client, mock_generate_blog, mock_post_to_platform
     ):
