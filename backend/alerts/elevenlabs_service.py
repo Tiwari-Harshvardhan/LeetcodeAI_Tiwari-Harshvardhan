@@ -1,3 +1,4 @@
+import os
 
 from elevenlabs import VoiceSettings
 from elevenlabs.client import ElevenLabs
