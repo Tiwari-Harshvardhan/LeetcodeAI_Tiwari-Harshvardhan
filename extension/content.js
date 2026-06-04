@@ -32,12 +32,6 @@
                 document.querySelector('[data-track-load="description_content"]') ||
                 document.querySelector('div[class*="question-content"]');
             const description = descriptionElement ? descriptionElement.innerText : "No description found.";
-            // Extract difficulty badge 
-            const difficultyElement = document.querySelector('.difficulty') ||
-                document.querySelector('.text-difficuly-easy') ||
-                document.querySelector('.text-difficuly-medium') ||
-                document.querySelector('.text-difficuly-hard');
-            const difficulty = difficultyElement ? difficultyElement.innerText.trim() : "Unknown Difficulty";
 
             let code = "";
             const viewLines = document.querySelector('.view-lines');
@@ -59,6 +53,7 @@
             // Extract difficulty badge
             const difficultyElement = document.querySelector('[class*="difficulty"]') ||
                 document.querySelector('[class*="Difficulty"]');
+            
             const difficulty = difficultyElement ? difficultyElement.innerText.trim() : "Unknown";
 
             // Extract the user's LeetCode Username
