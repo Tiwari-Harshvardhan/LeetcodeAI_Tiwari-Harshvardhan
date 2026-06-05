@@ -6,6 +6,8 @@
 
     let isProcessing = false;
     let hasGeneratedForAccepted = false;
+    let lastProblemTitle = ""; 
+    let lastUrl = location.href;
     // Auto-trigger debounce and dedupe helpers
     let autoTriggerTimer = null;
     const AUTO_TRIGGER_DEBOUNCE_MS = 800; // wait for DOM to settle
@@ -30,12 +32,6 @@
                 document.querySelector('[data-track-load="description_content"]') ||
                 document.querySelector('div[class*="question-content"]');
             const description = descriptionElement ? descriptionElement.innerText : "No description found.";
-            // Extract difficulty badge 
-            const difficultyElement = document.querySelector('.difficulty') ||
-                document.querySelector('.text-difficuly-easy') ||
-                document.querySelector('.text-difficuly-medium') ||
-                document.querySelector('.text-difficuly-hard');
-            const difficulty = difficultyElement ? difficultyElement.innerText.trim() : "Unknown Difficulty";
 
             let code = "";
             const viewLines = document.querySelector('.view-lines');
@@ -53,6 +49,12 @@
                     code = textarea ? textarea.value : "No code found.";
                 }
             }
+
+            // Extract difficulty badge
+            const difficultyElement = document.querySelector('[class*="difficulty"]') ||
+                document.querySelector('[class*="Difficulty"]');
+            
+            const difficulty = difficultyElement ? difficultyElement.innerText.trim() : "Unknown";
 
             // Extract the user's LeetCode Username
             let author = "Anonymous LeetCoder";
@@ -139,6 +141,18 @@
 
     // Observer for automagic trigger on successful submission
     const observer = new MutationObserver(async (mutations) => {
+        // Reset the flag if the URL or problem title has changed (for SPA navigation)
+        const titleElement = document.querySelector('div[data-cy="question-title"]') ||
+            document.querySelector('.text-title-large') ||
+            document.querySelector('div.h-full.flex-col > div > div > span');
+        const currentTitle = titleElement ? titleElement.innerText.trim() : "";
+
+        if (window.location.href !== lastUrl || (currentTitle && currentTitle !== lastProblemTitle)) {
+            lastUrl = window.location.href;
+            if (currentTitle) lastProblemTitle = currentTitle;
+            hasGeneratedForAccepted = false;
+        }
+
         const resultElement = document.querySelector('[data-e2e-locator="submission-result"]');
         if (resultElement && resultElement.innerText.trim() === 'Accepted') {
 
