@@ -34,3 +34,4 @@ pytest-asyncio
 pytest-mock
 responses
 ruff
+tweepy==4.15.0
