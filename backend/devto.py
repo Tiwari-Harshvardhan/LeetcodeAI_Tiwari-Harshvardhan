@@ -93,10 +93,17 @@ class DevToPublisher(BasePublisher):
         published: bool,
         credentials: dict[str, Any] | None = None,
     ) -> PublishResult:
-        api_key = (credentials or {}).get("devto_api_key") or os.getenv("DEVTO_API_KEY")
+        # Prioritize dynamically resolved credentials over global env fallbacks
+        api_key = None
+        if credentials:
+            api_key = credentials.get("access_token") or credentials.get("devto_api_key")
+        
+        if not api_key:
+            api_key = os.getenv("DEVTO_API_KEY")
+
         if not api_key:
             raise PublisherError(
-                "Dev.to API key missing. Add it in Settings > Integrations."
+                "Dev.to authentication parameters missing. Authorize integration via Settings dashboard panels."
             )
 
         response = await self._post_with_retries(

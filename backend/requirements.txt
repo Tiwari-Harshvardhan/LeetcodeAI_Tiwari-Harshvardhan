@@ -1,20 +1,32 @@
+# --- Core Framework & Web Server ---
 fastapi
 uvicorn[standard]
 pydantic
-google-genai
+python-dotenv
 
+# --- Database & Async Drivers ---
+motor
+pymongo
+
+# --- Security & Encryption ---
+cryptography
+
+# --- HTTP Clients & Social Integrations ---
 httpx
 requests
-python-dotenv
-twilio
-elevenlabs
+tweepy
+
+# --- AI Providers & Generation ---
+google-genai
+openai
+
+# --- Background Tasks & Communications ---
 apscheduler
 celery[redis]
-motor
+twilio
+elevenlabs
 pytz
-pymongo
-tweepy
-openai
+
 
 # --- Test & Dev Dependencies ---
 pytest
@@ -22,4 +34,3 @@ pytest-asyncio
 pytest-mock
 responses
 ruff
-

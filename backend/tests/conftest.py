@@ -1,12 +1,4 @@
-"""
-Shared pytest fixtures for the backend test suite.
-
-Phase 2 will populate this file with:
-- A TestClient fixture for FastAPI routes
-- Mock fixtures for Gemini API responses
-- Mock fixtures for Dev.to API responses
-- A mock MongoDB fixture
-"""
+# backend/tests/conftest.py
 
 from __future__ import annotations
 
@@ -14,6 +6,7 @@ import importlib
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
+import os
 
 import pytest
 import responses
@@ -57,7 +50,8 @@ class FakeCollection:
         self.update_one = AsyncMock(side_effect=self._update_one)
         self.insert_one = AsyncMock(side_effect=self._insert_one)
         self.find_one = AsyncMock(side_effect=self._find_one)
-        self.count_documents = AsyncMock(return_value=0)
+        self.count_documents = AsyncMock(side_effect=self._count_documents)
+        self.delete_many = AsyncMock(side_effect=self._delete_many)
 
     async def _find_one(self, query, *args, **kwargs):
         for record in self.records:
@@ -66,18 +60,57 @@ class FakeCollection:
         return None
 
     async def _insert_one(self, record, *args, **kwargs):
-        self.records.append(dict(record))
-        return Mock(inserted_id=record.get("id"))
+        # Handle dict parsing transformations cleanly if a pydantic instance is passed
+        doc = dict(record) if not hasattr(record, "model_dump") else record.model_dump()
+        self.records.append(doc)
+        return Mock(inserted_id=doc.get("id") or doc.get("_id"))
 
     async def _update_one(self, query, update, upsert=False, *args, **kwargs):
         payload = update.get("$set", update)
+        matched = False
+        
         for record in self.records:
             if self._matches(record, query):
-                record.update(payload)
+                matched = True
+                # Add proper path expansion for handling deep multi-tenant keys (e.g., credentials.linkedin)
+                for key, val in payload.items():
+                    if "." in key:
+                        parts = key.split(".")
+                        parent = record
+                        for part in parts[:-1]:
+                            if part not in parent:
+                                parent[part] = {}
+                            parent = parent[part]
+                        parent[parts[-1]] = val
+                    else:
+                        record[key] = val
                 return Mock(matched_count=1, modified_count=1)
-        if upsert:
-            self.records.append({**query, **payload})
+                
+        if upsert and not matched:
+            new_doc = {**query}
+            for key, val in payload.items():
+                if "." in key:
+                    parts = key.split(".")
+                    parent = new_doc
+                    for part in parts[:-1]:
+                        if part not in parent:
+                            parent[part] = {}
+                        parent = parent[part]
+                    parent[parts[-1]] = val
+                else:
+                    new_doc[key] = val
+            self.records.append(new_doc)
+            return Mock(matched_count=0, modified_count=0, upserted_id="mock-upsert-id")
+            
         return Mock(matched_count=0, modified_count=0)
+
+    async def _count_documents(self, query, *args, **kwargs):
+        return len([r for r in self.records if self._matches(r, query)])
+
+    async def _delete_many(self, query, *args, **kwargs):
+        initial_count = len(self.records)
+        self.records = [r for r in self.records if not self._matches(r, query)]
+        return Mock(deleted_count=initial_count - len(self.records))
 
     def find(self, *args, **kwargs):
         query = args[0] if args else {}
@@ -97,9 +130,9 @@ class FakeCollection:
                     return False
                 if "$exists" in value and (key in record) is not value["$exists"]:
                     return False
-                if "$gte" in value and record_value < value["$gte"]:
+                if "$gte" in value and (record_value is None or record_value < value["$gte"]):
                     return False
-                if "$lte" in value and record_value > value["$lte"]:
+                if "$lte" in value and (record_value is None or record_value > value["$lte"]):
                     return False
                 continue
             if record_value != value:
@@ -107,18 +140,10 @@ class FakeCollection:
         return True
 
 
-
-class FakeProblemInfoCollection:
-    def __init__(self) -> None:
-        self.find_one = AsyncMock(return_value=None)
-        self.update_one = AsyncMock()
-        self.count_documents = AsyncMock(return_value=0)
-
-
 class FakeDatabase:
     def __init__(self) -> None:
         self.preferences = FakeCollection()
-        self.problem_info = FakeProblemInfoCollection()
+        self.problem_info = FakeCollection()  # Upgraded to normal collection interface to track test states
         self.users = FakeCollection()
         self.integration_settings = FakeCollection()
         self.reminder_jobs = FakeCollection()
@@ -132,7 +157,8 @@ class FakeMotorClient:
 
 @pytest.fixture(autouse=True)
 def test_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    # monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("ENCRYPTION_KEY", "-CDr5C80aFVRKszE6j4wyt3Jz9e9RyE2axn88AFDk4s=")
+    monkeypatch.setenv("APP_SECRET_KEY", "test-app-secret-key-1234567890")
     monkeypatch.setenv("DEVTO_API_KEY", "test-devto-key")
     monkeypatch.setenv("HASHNODE_TOKEN", "test-hashnode-token")
     monkeypatch.setenv("HASHNODE_PUBLICATION_ID", "test-pub-id-123")
@@ -169,10 +195,13 @@ def app_module(monkeypatch: pytest.MonkeyPatch):
         "alerts.progress_checker",
         "alerts.elevenlabs_service",
         "services.reminder_scheduler",
+        "utils.crypto",
     ]:
         sys.modules.pop(module_name, None)
 
     module = importlib.import_module("main")
+    
+    # Inject fake database tracking points completely 
     monkeypatch.setattr(module, "db", fake_db)
     monkeypatch.setattr(module, "start_scheduler", Mock(name="start_scheduler"))
     return module
@@ -255,13 +284,6 @@ def mock_devto_request(mocker):
 
 @pytest.fixture
 def mock_hashnode_request(mocker):
-    """
-    Mocks httpx.AsyncClient.post for HashnodePublisher tests.
-
-    Default return value is a successful GraphQL response.
-    Individual tests can override ``response.json.return_value`` to simulate
-    GraphQL error payloads without making real network calls or needing API keys.
-    """
     import httpx
 
     response = mocker.Mock(spec=httpx.Response)
