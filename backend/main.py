@@ -403,7 +403,6 @@ async def create_blog(
 
     user_settings = await _settings_for_user(current_user["id"]) if current_user else {}
 
-```python
     try:
         blog_content = await run_in_threadpool(
             generate_blog,
