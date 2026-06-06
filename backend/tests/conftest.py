@@ -187,9 +187,8 @@ def client(app_module):
 
 @pytest.fixture
 def mock_generate_blog(app_module, mocker):
-    return mocker.patch.object(
-        app_module,
-        "generate_blog",
+    return mocker.patch(
+        "main.generate_blog",
         autospec=True,
         return_value="# Mock blog content",
     )
@@ -197,10 +196,9 @@ def mock_generate_blog(app_module, mocker):
 
 @pytest.fixture
 def mock_post_to_platform(app_module, mocker):
-    return mocker.patch.object(
-        app_module,
-        "publish_to_platforms",
-        autospec=True,
+    return mocker.patch(
+        "main.publish_to_platforms",
+        new_callable=AsyncMock,
         return_value=[
             {
                 "platform": "devto",

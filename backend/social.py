@@ -197,6 +197,7 @@ def share_to_platforms(
     ][:4]
 
     results: list[SocialResult] = []
+    results: list[SocialResult] = []
 
     for platform_name, sharer in SHARERS.items():
         try:
