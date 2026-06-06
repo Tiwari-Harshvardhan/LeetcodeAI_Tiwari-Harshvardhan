@@ -163,39 +163,32 @@ class HashnodePublisher(BasePublisher):
           }
         }
         """
-        try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                http_response = await client.post(
-                    "https://gql.hashnode.com/",
-                    headers={
-                        "Authorization": token,
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "query": mutation,
-                        "variables": {
-                            "input": {
-                                "publicationId": publication_id,
-                                "title": f"LeetCode Solution: {title}",
-                                "contentMarkdown": content,
-                                "tags": [{"name": tag, "slug": tag} for tag in tags],
-                                "draft": not published,
-                            }
-                        },
-                    },
-                )
-            if http_response.status_code not in (200, 201):
-                raise PublisherError(
-                    f"Hashnode API Error {http_response.status_code}: {http_response.text}"
-                )
-            response = http_response.json()
-        except httpx.RequestError as exc:
-            raise PublisherError(f"Hashnode network error: {exc}") from exc
-        # GraphQL always returns HTTP 200; check the response-level errors field.
-        gql_errors = response.get("errors")
-        if gql_errors:
-            message = gql_errors[0].get("message", "Hashnode GraphQL error")
-            raise PublisherError(f"Hashnode GraphQL error: {message}")
+        response = self._post_with_retries(
+            "https://gql.hashnode.com/",
+            headers={
+                "Authorization": token,
+                "Content-Type": "application/json",
+            },
+            payload={
+                "query": mutation,
+                "variables": {
+                    "input": {
+                        "publicationId": publication_id,
+                        "title": f"LeetCode Solution: {title}",
+                        "contentMarkdown": content,
+                        "tags": [{"name": tag, "slug": tag} for tag in tags],
+                        "draft": not published,
+                    }
+                },
+            },
+            platform="Hashnode",
+        )
+
+        # FIX: GraphQL always returns HTTP 200 — errors live in the body
+        if response.get("errors"):
+            error_msg = response["errors"][0].get("message", "Unknown Hashnode GraphQL error")
+            raise PublisherError(f"Hashnode GraphQL error: {error_msg}")
+
         post = response.get("data", {}).get("publishPost", {}).get("post", {})
         return PublishResult(
             platform=self.platform,
@@ -359,12 +352,9 @@ async def publish_to_platforms(
 
 async def post_to_platform(title: str, content: str) -> dict[str, Any]:
     """Backward-compatible Dev.to-only wrapper used by older integrations."""
-    result = await DevToPublisher().publish(
-        title,
-        content,
-        tags=DEFAULT_TAGS,
-        published=True,
-    )
-    if result.status != "success":
-        raise Exception(result.message or "Dev.to publishing failed.")
-    return result.response or result.as_dict()
+    results = publish_to_platforms(title, content, platforms=["devto"])
+    first = results[0]
+    if first["status"] != "success":
+        raise Exception(first.get("message", "Dev.to publishing failed."))
+    return first.get("response", first)
+

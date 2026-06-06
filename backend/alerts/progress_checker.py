@@ -241,12 +241,6 @@ async def enqueue_due_reminders(now_utc: datetime | None = None) -> dict:
         lc_username = user.get("leetcode_username", "vanshaggarwal27")
         if not has_solved and lc_username:
             try:
-              main
-                import requests
-                # import asyncio
-                # import datetime
-                import asyncio
-                import datetime
 
                 import requests
 
@@ -267,8 +261,8 @@ async def enqueue_due_reminders(now_utc: datetime | None = None) -> dict:
                 submissions = data.get("data", {}).get("recentAcSubmissionList", [])
 
                 # Check if any submission has a timestamp from today (UTC)
-                # midnight_utc = datetime.datetime.now(datetime.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
                 midnight_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
                 midnight_timestamp = int(midnight_utc.timestamp())
 
                 for sub in submissions:
